@@ -1164,6 +1164,7 @@ function disableDrawing(){
 }
 function setTool(t){
   drawMode = t;
+  if(!t) curAnno = null;
   document.querySelectorAll('.draw-btn[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
   if(t !== 'laser'){ laserPos = null; }
   composite.style.cursor = t ? 'crosshair' : '';
