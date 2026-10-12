@@ -21,9 +21,11 @@ button.small{min-width:28px;padding:0 6px;font-size:16px}
 #state{font-size:12px;color:#b9f464;min-width:54px;text-align:center}
 #tip{position:fixed;top:5px;left:50%;transform:translate(-50%,-100%);font-size:11px;color:rgba(255,255,255,.78);white-space:nowrap;opacity:0;transition:opacity .2s}
 body.drawing #toolbar{border-color:#b9f464}
+#ink{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 </style>
 </head>
 <body>
+  <canvas id="ink"></canvas>
   <div id="tip">鼠标移到屏幕顶部显示工具栏</div>
   <div id="toolbar">
     <div class="group"><span id="state">● 录制中</span><button class="small" data-action="pause" title="暂停 / 继续">Ⅱ</button><button class="stop" data-action="stop" title="停止录制">■ 停止</button></div>
@@ -35,9 +37,98 @@ body.drawing #toolbar{border-color:#b9f464}
 const api = window.hudAPI;
 const toolbar = document.getElementById('toolbar');
 const stateEl = document.getElementById('state');
+const ink = document.getElementById('ink');
+const inkCtx = ink.getContext('2d');
 let currentTool = null;
 let drawing = false;
 let hideTimer = null;
+let inkScale = 1;
+let inkStrokes = [];
+let inkCurrent = null;
+let laserTrail = [];
+let laserRaf = 0;
+
+function resizeInk(){
+  inkScale = window.devicePixelRatio || 1;
+  ink.width = Math.max(1, Math.round(window.innerWidth * inkScale));
+  ink.height = Math.max(1, Math.round(window.innerHeight * inkScale));
+  inkCtx.setTransform(inkScale, 0, 0, inkScale, 0, 0);
+  redrawInk();
+}
+function strokePath(points){
+  if(!points.length) return;
+  inkCtx.beginPath();
+  inkCtx.moveTo(points[0].x, points[0].y);
+  if(points.length === 1) inkCtx.lineTo(points[0].x + 0.01, points[0].y);
+  for(let i = 1; i < points.length; i++) inkCtx.lineTo(points[i].x, points[i].y);
+  inkCtx.stroke();
+}
+function paintInkStroke(a){
+  inkCtx.save();
+  inkCtx.lineCap = 'round'; inkCtx.lineJoin = 'round';
+  inkCtx.strokeStyle = a.color; inkCtx.fillStyle = a.color;
+  if(a.tool === 'pen'){
+    inkCtx.lineWidth = a.w; strokePath(a.pts);
+  }else if(a.tool === 'hl'){
+    inkCtx.globalAlpha = .35; inkCtx.lineWidth = a.w * 4; inkCtx.lineCap = 'butt'; strokePath(a.pts);
+  }else if(a.tool === 'rect'){
+    inkCtx.lineWidth = a.w;
+    inkCtx.strokeRect(Math.min(a.x1,a.x2), Math.min(a.y1,a.y2), Math.abs(a.x2-a.x1), Math.abs(a.y2-a.y1));
+  }else if(a.tool === 'arrow'){
+    const dx = a.x2-a.x1, dy = a.y2-a.y1, len = Math.hypot(dx,dy);
+    if(len > 2){
+      const ang = Math.atan2(dy,dx), head = Math.min(len*.5, a.w*5);
+      inkCtx.lineWidth = a.w;
+      inkCtx.beginPath(); inkCtx.moveTo(a.x1,a.y1); inkCtx.lineTo(a.x2,a.y2); inkCtx.stroke();
+      inkCtx.beginPath(); inkCtx.moveTo(a.x2,a.y2);
+      inkCtx.lineTo(a.x2-head*Math.cos(ang-.45), a.y2-head*Math.sin(ang-.45));
+      inkCtx.lineTo(a.x2-head*Math.cos(ang+.45), a.y2-head*Math.sin(ang+.45));
+      inkCtx.closePath(); inkCtx.fill();
+    }
+  }
+  inkCtx.restore();
+}
+function paintLaserInk(){
+  const now = performance.now();
+  while(laserTrail.length && now-laserTrail[0].t > 700) laserTrail.shift();
+  inkCtx.save(); inkCtx.lineCap='round'; inkCtx.strokeStyle='#ff6584'; inkCtx.fillStyle='#ff6584';
+  for(let i=1;i<laserTrail.length;i++){
+    const age=(now-laserTrail[i].t)/700;
+    inkCtx.globalAlpha=Math.max(0,1-age)*.8;
+    inkCtx.lineWidth=8*(1-age*.6);
+    inkCtx.beginPath(); inkCtx.moveTo(laserTrail[i-1].x,laserTrail[i-1].y); inkCtx.lineTo(laserTrail[i].x,laserTrail[i].y); inkCtx.stroke();
+  }
+  const p=laserTrail[laserTrail.length-1];
+  if(p){ inkCtx.globalAlpha=.9; inkCtx.beginPath(); inkCtx.arc(p.x,p.y,14,0,Math.PI*2); inkCtx.fill(); inkCtx.globalAlpha=1; inkCtx.fillStyle='#fff'; inkCtx.beginPath(); inkCtx.arc(p.x,p.y,4,0,Math.PI*2); inkCtx.fill(); }
+  inkCtx.restore();
+}
+function redrawInk(){
+  inkCtx.clearRect(0,0,window.innerWidth,window.innerHeight);
+  inkStrokes.forEach(paintInkStroke);
+  if(inkCurrent) paintInkStroke(inkCurrent);
+  if(laserTrail.length) paintLaserInk();
+}
+function inkPoint(e){ return {x:e.clientX,y:e.clientY}; }
+function localPointer(type,e){
+  if(!drawing) return;
+  const p=inkPoint(e);
+  if(currentTool==='laser'){
+    if(type==='move' || type==='down') laserTrail.push({...p,t:performance.now()});
+    if(laserTrail.length>80) laserTrail.splice(0,laserTrail.length-80);
+    redrawInk();
+    if(!laserRaf) laserRaf=requestAnimationFrame(function tick(){ laserRaf=0; redrawInk(); if(laserTrail.length) laserRaf=requestAnimationFrame(tick); });
+    return;
+  }
+  if(type==='down') inkCurrent={tool:currentTool,color:'#ff6584',w:4,pts:[p],x1:p.x,y1:p.y,x2:p.x,y2:p.y};
+  else if(type==='move' && inkCurrent){
+    if(inkCurrent.tool==='pen'||inkCurrent.tool==='hl') inkCurrent.pts.push(p); else {inkCurrent.x2=p.x;inkCurrent.y2=p.y;}
+  }else if((type==='up'||type==='cancel') && inkCurrent){ inkStrokes.push(inkCurrent); inkCurrent=null; }
+  redrawInk();
+}
+function clearInk(){ inkStrokes=[]; inkCurrent=null; laserTrail=[]; redrawInk(); }
+function undoInk(){ inkStrokes.pop(); redrawInk(); }
+window.addEventListener('resize', resizeInk);
+resizeInk();
 
 function setInteractive(value){ api.setMouseMode(!!value); }
 function showToolbar(){
@@ -62,6 +153,8 @@ document.querySelectorAll('button[data-action]').forEach(button => {
   button.addEventListener('click', () => {
     const action = button.dataset.action;
     if(action === 'tool'){ setTool(button.dataset.tool); return; }
+    if(action === 'undo') undoInk();
+    if(action === 'clear' || action === 'stop') clearInk();
     api.action({type:action});
     if(action === 'stop') stateEl.textContent = '正在停止…';
     showToolbar();
@@ -78,12 +171,13 @@ toolbar.addEventListener('mouseleave', () => { if(!drawing){ setInteractive(fals
 function sendPointer(type, e){
   api.pointer({type, screenX:e.screenX, screenY:e.screenY, buttons:e.buttons || 0});
 }
-window.addEventListener('pointerdown', e => { if(drawing) sendPointer('down', e); });
-window.addEventListener('pointermove', e => { if(drawing) sendPointer('move', e); });
-window.addEventListener('pointerup', e => { if(drawing) sendPointer('up', e); });
-window.addEventListener('pointercancel', e => { if(drawing) sendPointer('cancel', e); });
+window.addEventListener('pointerdown', e => { if(drawing){ localPointer('down',e); sendPointer('down', e); } });
+window.addEventListener('pointermove', e => { if(drawing){ localPointer('move',e); sendPointer('move', e); } });
+window.addEventListener('pointerup', e => { if(drawing){ localPointer('up',e); sendPointer('up', e); } });
+window.addEventListener('pointercancel', e => { if(drawing){ localPointer('cancel',e); sendPointer('cancel', e); } });
 showToolbar();
 scheduleHide();
 </script>
 </body>
 </html>
+
