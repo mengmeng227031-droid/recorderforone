@@ -47,6 +47,7 @@ let inkStrokes = [];
 let inkCurrent = null;
 let laserTrail = [];
 let laserRaf = 0;
+let strokePointer = false;
 
 function resizeInk(){
   inkScale = window.devicePixelRatio || 1;
@@ -109,6 +110,7 @@ function redrawInk(){
   if(laserTrail.length) paintLaserInk();
 }
 function inkPoint(e){ return {x:e.clientX,y:e.clientY}; }
+function isToolbarTarget(e){ return e.target instanceof Element && toolbar.contains(e.target); }
 function localPointer(type,e){
   if(!drawing) return;
   const p=inkPoint(e);
@@ -171,10 +173,18 @@ toolbar.addEventListener('mouseleave', () => { if(!drawing){ setInteractive(fals
 function sendPointer(type, e){
   api.pointer({type, screenX:e.screenX, screenY:e.screenY, buttons:e.buttons || 0});
 }
-window.addEventListener('pointerdown', e => { if(drawing){ localPointer('down',e); sendPointer('down', e); } });
-window.addEventListener('pointermove', e => { if(drawing){ localPointer('move',e); sendPointer('move', e); } });
-window.addEventListener('pointerup', e => { if(drawing){ localPointer('up',e); sendPointer('up', e); } });
-window.addEventListener('pointercancel', e => { if(drawing){ localPointer('cancel',e); sendPointer('cancel', e); } });
+window.addEventListener('pointerdown', e => {
+  if(drawing && !isToolbarTarget(e)){ strokePointer = true; localPointer('down',e); sendPointer('down', e); }
+});
+window.addEventListener('pointermove', e => {
+  if(drawing && (strokePointer || !isToolbarTarget(e))){ localPointer('move',e); sendPointer('move', e); }
+});
+window.addEventListener('pointerup', e => {
+  if(drawing && strokePointer){ localPointer('up',e); sendPointer('up', e); strokePointer = false; }
+});
+window.addEventListener('pointercancel', e => {
+  if(drawing && strokePointer){ localPointer('cancel',e); sendPointer('cancel', e); strokePointer = false; }
+});
 showToolbar();
 scheduleHide();
 </script>
