@@ -133,14 +133,18 @@ window.addEventListener('resize', resizeInk);
 resizeInk();
 
 function setInteractive(value){ api.setMouseMode(!!value); }
+function hideToolbar(){
+  toolbar.classList.add('hidden');
+  if(!drawing) setInteractive(false);
+}
 function showToolbar(){
   toolbar.classList.remove('hidden');
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => toolbar.classList.add('hidden'), 10000);
+  hideTimer = setTimeout(hideToolbar, 10000);
 }
 function scheduleHide(){
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => toolbar.classList.add('hidden'), 10000);
+  hideTimer = setTimeout(hideToolbar, 10000);
 }
 function setTool(tool){
   currentTool = currentTool === tool ? null : tool;
@@ -173,8 +177,10 @@ document.querySelectorAll('button[data-action]').forEach(button => {
 });
 
 window.addEventListener('mousemove', e => {
-  if(e.clientY <= 90){ showToolbar(); setInteractive(true); }
-  else if(!drawing && e.clientY > 125){ scheduleHide(); setInteractive(false); }
+  const r = toolbar.getBoundingClientRect();
+  const overToolbar = !toolbar.classList.contains('hidden') && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  if(overToolbar || e.clientY <= 90){ showToolbar(); setInteractive(true); }
+  else if(!drawing){ scheduleHide(); setInteractive(false); }
 });
 toolbar.addEventListener('mouseenter', () => { showToolbar(); setInteractive(true); });
 toolbar.addEventListener('mouseleave', () => { if(!drawing){ setInteractive(false); scheduleHide(); } });
