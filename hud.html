@@ -29,7 +29,7 @@ body.drawing #toolbar{border-color:#b9f464}
   <div id="tip">鼠标移到屏幕顶部显示工具栏</div>
   <div id="toolbar">
     <div class="group"><span id="state">● 录制中</span><button class="small" data-action="pause" title="暂停 / 继续">Ⅱ</button><button class="stop" data-action="stop" title="停止录制">■ 停止</button></div>
-    <div class="group"><button data-action="tool" data-tool="laser" title="激光笔">🔴</button><button data-action="tool" data-tool="pen" title="画笔">✏️</button><button data-action="tool" data-tool="hl" title="荧光笔">🖍️</button><button data-action="tool" data-tool="arrow" title="箭头">↗</button><button data-action="tool" data-tool="rect" title="矩形">▭</button></div>
+    <div class="group"><button data-action="pointer" title="恢复鼠标操作">🖱</button><button data-action="tool" data-tool="laser" title="激光笔">🔴</button><button data-action="tool" data-tool="pen" title="画笔">✏️</button><button data-action="tool" data-tool="hl" title="荧光笔">🖍️</button><button data-action="tool" data-tool="arrow" title="箭头">↗</button><button data-action="tool" data-tool="rect" title="矩形">▭</button></div>
     <div class="group"><button class="small" data-action="undo" title="撤销">↶</button><button class="small" data-action="clear" title="清除涂鸦">🗑️</button><button data-action="screenshot" title="截图">📸</button></div>
   </div>
 <script>
@@ -155,6 +155,15 @@ document.querySelectorAll('button[data-action]').forEach(button => {
   button.addEventListener('click', () => {
     const action = button.dataset.action;
     if(action === 'tool'){ setTool(button.dataset.tool); return; }
+    if(action === 'pointer'){
+      inkCurrent = null;
+      strokePointer = false;
+      setTool(null);
+      api.action({type:'tool', tool:null});
+      redrawInk();
+      showToolbar();
+      return;
+    }
     if(action === 'undo') undoInk();
     if(action === 'clear' || action === 'stop') clearInk();
     api.action({type:action});
