@@ -1,0 +1,1879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' blob:; object-src 'none'; base-uri 'none'"/>
+<title>屏幕录制助手</title>
+<link rel="icon" href="data:,"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* PAICONS theme: near-black with a green tint + lime accent */
+  --bg:#0b0d0a;--surface:#12150f;--surface2:#1a2014;--line:#2a3222;
+  --accent:#b9f464;--accent-ink:#0b0d0a;--accent2:#ff6584;--text:#f2f5ee;--sub:#8e9a85;
+  --red:#ef4444;--green:#b9f464;--yellow:#f5b83d;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:radial-gradient(900px 420px at 85% -80px,rgba(185,244,100,.07),transparent 70%),var(--bg);background-attachment:fixed;color:var(--text);min-height:100vh;padding:24px 20px}
+h1{font-size:22px;font-weight:700;letter-spacing:.5px;margin-bottom:4px}
+.subtitle{color:var(--sub);font-size:13px;margin-bottom:24px}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible,.mode-card:focus-within,.mic-pill:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* Desktop-only controls are invisible in the browser build. They keep whatever display
+   they naturally have (flex/block) in the desktop app, so this must out-rank later rules. */
+html:not(.is-desktop) .desktop-only{display:none!important}
+
+/* ── Banner (crash recovery) ── */
+.banner{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;
+  background:rgba(245,184,61,.08);border:1px solid var(--yellow);border-radius:10px;
+  padding:10px 14px;font-size:13px
+}
+.banner span{flex:1;min-width:200px}
+
+/* ── Mode cards ── */
+.mode-grid{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.mode-card{
+  flex:1;min-width:130px;padding:14px 16px;border-radius:12px;
+  background:var(--surface);border:2px solid transparent;cursor:pointer;
+  transition:border .15s,background .15s;user-select:none
+}
+.mode-card:hover{background:var(--surface2)}
+.mode-card.active{border-color:var(--accent);background:var(--surface2)}
+.mode-card input{position:absolute;opacity:0;pointer-events:none}
+.mode-card .icon{font-size:22px;margin-bottom:6px}
+.mode-card .label{font-weight:600;font-size:14px}
+.mode-card .desc{color:var(--sub);font-size:11px;margin-top:3px}
+
+/* ── Options row ── */
+.options{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end}
+.opt-group{display:flex;flex-direction:column;gap:4px}
+.opt-group > label,.mic-toggle > label{font-size:11px;color:var(--sub);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+select,input[type=range]{
+  background:var(--surface2);border:1px solid var(--line);color:var(--text);
+  padding:5px 10px;border-radius:8px;font-size:13px;outline:none;cursor:pointer
+}
+select{max-width:210px}
+select:focus{border-color:var(--accent)}
+input[type=number]{
+  background:var(--surface2);border:1px solid var(--line);color:var(--text);
+  padding:5px 8px;border-radius:8px;font-size:13px;width:78px;outline:none
+}
+input[type=number]:focus{border-color:var(--accent)}
+.chk{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;user-select:none}
+.chk input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+.chk.disabled{opacity:.45;cursor:default}
+
+/* ── Advanced options ── */
+details.adv{
+  background:var(--surface);border-radius:10px;margin-bottom:16px;padding:0 14px
+}
+details.adv summary{
+  cursor:pointer;font-size:13px;font-weight:600;color:var(--sub);padding:10px 0;
+  list-style:none;user-select:none
+}
+details.adv summary::-webkit-details-marker{display:none}
+details.adv summary::before{content:'▸ ';display:inline-block;transition:transform .15s}
+details.adv[open] summary::before{transform:rotate(90deg)}
+details.adv .options{margin:4px 0 14px}
+.chk-grid{display:flex;gap:8px 22px;flex-wrap:wrap;width:100%}
+.folder-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;font-size:12px;color:var(--sub)}
+.folder-line code{background:var(--surface2);border-radius:6px;padding:3px 8px;color:var(--text);max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-sm{padding:5px 12px;font-size:12px;border-radius:8px}
+
+/* ── Instruction box ── */
+#instr{
+  background:var(--surface);border-left:3px solid var(--accent);
+  border-radius:8px;padding:12px 16px;margin-bottom:16px;
+  font-size:13px;line-height:1.8;display:none
+}
+#instr b{color:var(--accent)}
+#instr .warn{color:var(--accent2)}
+
+/* ── Controls ── */
+.ctrl-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.btn{
+  padding:9px 22px;border-radius:10px;border:none;font-size:14px;font-weight:600;
+  cursor:pointer;transition:opacity .15s,transform .1s;letter-spacing:.3px
+}
+.btn:disabled{opacity:.3;cursor:default}
+.btn:not(:disabled):active{transform:scale(.96)}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-warn{background:var(--yellow);color:#000}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--line)}
+
+/* ── Status bar ── */
+.status-bar{display:flex;align-items:center;gap:16px;margin-bottom:12px;min-height:28px;flex-wrap:wrap}
+#status{font-weight:600;font-size:14px}
+#timer{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent);display:none;letter-spacing:1px}
+.rec-dot{width:10px;height:10px;border-radius:50%;background:var(--red);display:none;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.rec-dot{animation:none}}
+
+/* ── Mic toggle ── */
+.mic-toggle{display:flex;flex-direction:column;gap:4px}
+.mic-pill{
+  display:flex;align-items:center;gap:8px;background:var(--surface2);
+  border:1px solid var(--line);border-radius:8px;padding:5px 12px;cursor:pointer;
+  user-select:none;transition:border-color .15s
+}
+.mic-pill.on {border-color:var(--green)}
+.mic-pill.off{border-color:var(--red)}
+.mic-icon{font-size:15px;line-height:1}
+.mic-label{font-size:13px;font-weight:600;min-width:22px}
+.mic-track{
+  width:34px;height:18px;border-radius:9px;background:#3a4530;
+  position:relative;transition:background .2s;flex-shrink:0
+}
+.mic-pill.on  .mic-track{background:var(--green)}
+.mic-pill.off .mic-track{background:var(--red)}
+.mic-thumb{
+  width:12px;height:12px;border-radius:50%;background:#0b0d0a;
+  position:absolute;top:3px;left:3px;transition:left .2s
+}
+.mic-pill.on .mic-thumb{left:19px}
+
+/* ── Audio meter ── */
+#meter-wrap{display:none;flex-direction:column;gap:2px}
+#meter-wrap span{font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px}
+#meter{width:120px;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
+#meter.clip{box-shadow:0 0 0 1px var(--red)}
+#meter-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--green) 0%,var(--green) 60%,var(--yellow) 82%,var(--red) 100%);background-size:120px 100%;border-radius:4px;transition:width .07s}
+
+/* ── Countdown ── */
+#countdown{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;
+  align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:999;font-size:120px;
+  font-weight:900;color:#fff;text-shadow:0 4px 40px rgba(185,244,100,.55)
+}
+#countdown small{font-size:14px;font-weight:500;text-shadow:none;color:var(--sub)}
+
+/* ── View area ── */
+#view{
+  width:100%;background:#000;display:none;border-radius:12px;
+  overflow:hidden;margin-top:4px;position:relative
+}
+#mainVideo{width:100%;display:block}
+#composite{width:100%;display:none;touch-action:none}
+.view-label{
+  position:absolute;top:10px;left:12px;background:rgba(0,0,0,.55);
+  color:#fff;font-size:11px;padding:3px 8px;border-radius:20px;
+  backdrop-filter:blur(4px);pointer-events:none
+}
+
+/* ── Drawing toolbar ── */
+#draw-bar{
+  position:absolute;top:10px;right:12px;display:none;
+  flex-direction:column;gap:6px;z-index:10
+}
+.draw-btn{
+  width:34px;height:34px;border-radius:50%;border:none;cursor:pointer;
+  font-size:16px;background:rgba(20,20,30,.75);color:#fff;
+  backdrop-filter:blur(4px);transition:background .15s
+}
+.draw-btn.active{background:var(--accent);color:var(--accent-ink)}
+.color-dot{width:18px;height:18px;border-radius:50%;border:2px solid #fff;cursor:pointer;margin:0 auto}
+
+/* ── Modals ── */
+.modal{
+  position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;
+  align-items:center;justify-content:center;z-index:1000;padding:20px;overflow:auto
+}
+.modal .modal-box{
+  background:var(--surface);border-radius:16px;padding:20px;
+  max-width:860px;width:100%;max-height:100%;overflow:auto
+}
+#preview-modal video{width:100%;border-radius:10px;max-height:52vh;background:#000}
+.modal-meta{font-size:12px;color:var(--sub);margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.fmt-badge{background:var(--surface2);border:1px solid var(--line);border-radius:5px;padding:2px 8px;font-weight:600;font-size:11px;letter-spacing:.5px}
+.fmt-badge.webm{border-color:var(--accent);color:var(--accent)}
+.modal-actions{display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap}
+#mp4Unavail{font-size:11px;color:var(--sub);margin-top:6px;text-align:right;display:none}
+.is-desktop #mp4Unavail{display:none!important}
+.tool-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--sub)}
+.tool-row b{color:var(--text);font-size:12px;min-width:44px}
+.tool-row .info{margin-left:auto}
+.no-preview{padding:36px 16px;text-align:center;color:var(--sub);font-size:13px;background:#000;border-radius:10px}
+
+/* ── Export progress ── */
+.progress{margin-top:12px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--sub)}
+.progress .bar{flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.progress .bar div{height:100%;width:0%;background:var(--accent);transition:width .2s}
+.progress .bar.indeterminate div{width:35%;animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+
+/* ── Source picker ── */
+#source-modal .modal-box{max-width:920px}
+.tabs{display:flex;gap:6px;margin:10px 0 12px}
+.tab{
+  background:var(--surface2);border:1px solid var(--line);color:var(--sub);padding:6px 16px;
+  border-radius:8px;font-size:13px;font-weight:600;cursor:pointer
+}
+.tab.active{color:var(--accent);border-color:var(--accent)}
+#source-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;
+  max-height:50vh;overflow:auto;padding:2px
+}
+.src-card{
+  background:var(--surface2);border:2px solid transparent;border-radius:10px;padding:8px;
+  cursor:pointer;color:var(--text);text-align:left;display:flex;flex-direction:column;gap:6px
+}
+.src-card:hover{border-color:#3a4530}
+.src-card.sel{border-color:var(--accent)}
+.src-card img.thumb{width:100%;aspect-ratio:16/9;object-fit:contain;background:#000;border-radius:6px;display:block}
+.src-card .nm{display:flex;align-items:center;gap:6px;font-size:12px;overflow:hidden}
+.src-card .nm img{width:16px;height:16px;flex-shrink:0}
+.src-card .nm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src-empty{grid-column:1/-1;color:var(--sub);font-size:13px;padding:30px;text-align:center}
+
+/* ── Toast ── */
+#toast{
+  position:fixed;left:50%;bottom:22px;transform:translate(-50%,30px);opacity:0;pointer-events:none;
+  background:var(--surface2);border:1px solid #3a4530;border-radius:10px;padding:10px 14px;font-size:13px;
+  display:flex;align-items:center;gap:12px;z-index:1100;max-width:90vw;transition:opacity .2s,transform .2s;
+  box-shadow:0 8px 28px rgba(0,0,0,.5)
+}
+#toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#toast button{background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;font-size:13px;white-space:nowrap}
+
+/* ── Hotkey hint ── */
+.keys{font-size:11px;color:var(--sub);margin-top:8px;line-height:1.9}
+.keys kbd{
+  background:var(--surface2);border:1px solid #3a4530;border-radius:4px;
+  padding:1px 5px;font-family:monospace;font-size:11px
+}
+
+/* ── Guided Steps shell ── */
+body{padding:0}
+.wrap{max-width:900px;margin:0 auto;padding:26px 20px 70px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}
+.logo{display:inline-flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.3px;font-size:16px}
+.logo i{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent)}
+.pill{font-size:12px;color:var(--sub);border:1px solid var(--line);padding:5px 12px;border-radius:99px}
+.steps{display:flex;gap:8px;margin-bottom:30px;list-style:none}
+.steps li{flex:1;font-size:13px;color:var(--sub);display:flex;flex-direction:column;gap:8px}
+.steps li::before{content:'';height:4px;border-radius:4px;background:var(--surface2);transition:.3s}
+.steps li.done::before{background:rgba(185,244,100,.45)}
+.steps li.now::before{background:var(--accent)}
+.steps li.now{color:var(--text);font-weight:700}
+.step,#preview-modal{animation:stepin .3s ease-out}
+@keyframes stepin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.step{display:none}
+.step.on{display:block}
+h1{font-size:clamp(28px,5vw,44px);font-weight:600;letter-spacing:-.02em;margin-bottom:8px}
+h1 em{font-style:normal;color:var(--accent)}
+.lead{color:var(--sub);margin-bottom:24px;line-height:1.6}
+.nav{display:flex;justify-content:space-between;margin-top:26px;gap:12px;align-items:center}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:16px}
+.panel .options{margin-bottom:0}
+.panel .options + .options{margin-top:16px}
+.btn-lg{padding:14px 28px;font-size:16px;border-radius:13px}
+.mode-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:0}
+.mode-card{position:relative;display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:18px;padding:22px;background:var(--surface);transition:.18s}
+.mode-card:hover{transform:translateY(-3px);border-color:#47563a;background:var(--surface)}
+.mode-card.active{border-color:var(--accent);background:linear-gradient(180deg,rgba(185,244,100,.09),transparent),var(--surface)}
+.mode-card .icon{font-size:34px;margin:0}
+.mode-card .label{font-size:18px;font-weight:700}
+.mode-card .desc{font-size:14px;line-height:1.5;margin:0}
+.btn{border-radius:12px}
+.btn-primary:hover:not(:disabled){filter:brightness(1.07)}
+.rec-stage{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:22px;margin-bottom:16px}
+.rec-stage .ctrl-row{justify-content:center;margin:6px 0 16px}
+.rec-stage .status-bar{justify-content:center;margin-bottom:12px}
+.rec-stage #timer{font-size:46px}
+.rec-stage .keys{text-align:center}
+#preview-modal{position:static;inset:auto;background:none;padding:0;z-index:auto;overflow:visible;display:none;flex-direction:column;align-items:stretch;justify-content:flex-start}
+#preview-modal .modal-box{background:none;padding:0;max-width:none;max-height:none;overflow:visible}
+#preview-modal video{border:1px solid var(--line);border-radius:16px}
+#preview-modal .tool-row{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.keys kbd{border-color:var(--line)}
+@media (max-width:600px){.steps li{font-size:11px}}
+
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top"><span class="logo"><i></i> 屏幕录制助手</span><span class="pill">隐私保护 · 不会上传任何内容</span></header>
+<ol class="steps" id="steps"><li class="now">1 · 选择</li><li>2 · 设置</li><li>3 · 录制</li><li>4 · 保存</li></ol>
+
+<!-- Crash recovery (desktop app) -->
+<div class="banner" id="recoveryBanner" hidden>
+  <span id="recoveryText"></span>
+  <button class="btn btn-primary btn-sm" id="recoverBtn">恢复</button>
+  <button class="btn btn-ghost btn-sm" id="recoveryDeleteBtn">删除</button>
+</div>
+
+
+<!-- STEP 1 -->
+<section class="step on" data-step="1">
+  <h1>你想要<em>录制什么？</em></h1>
+  <p class="lead">请选择录制内容，下一步还可以修改。</p>
+<!-- Mode selector -->
+<div class="mode-grid">
+  <label class="mode-card active">
+    <input type="radio" name="mode" value="screen" checked/>
+    <div class="icon">🖥️</div>
+    <div class="label">仅录屏幕</div>
+    <div class="desc" id="descScreen">标签页 / 窗口 + 麦克风</div>
+  </label>
+  <label class="mode-card">
+    <input type="radio" name="mode" value="camera"/>
+    <div class="icon">📷</div>
+    <div class="label">仅录摄像头</div>
+    <div class="desc">摄像头 + 语音</div>
+  </label>
+  <label class="mode-card">
+    <input type="radio" name="mode" value="both"/>
+    <div class="icon">🎬</div>
+    <div class="label">屏幕 + 摄像头</div>
+    <div class="desc">摄像头覆盖在屏幕上</div>
+  </label>
+</div>
+
+  <div class="nav"><span></span><button class="btn btn-primary btn-lg" id="to2" type="button">继续 →</button></div>
+</section>
+
+<!-- STEP 2 -->
+<section class="step" data-step="2">
+  <h1>完成<em>录制设置</em></h1>
+  <p class="lead">已选择适合大多数情况的默认设置，你只需修改必要选项。</p>
+  <div class="panel">
+<!-- Options row -->
+<div class="options">
+  <div class="opt-group" id="opt-quality">
+    <label for="qualitySelect">画质</label>
+    <select id="qualitySelect">
+      <option value="8000000">超高（8 Mbps）</option>
+      <option value="4000000" selected>高（4 Mbps）</option>
+      <option value="2000000">中（2 Mbps）</option>
+      <option value="1000000">低（1 Mbps）</option>
+    </select>
+  </div>
+  <div class="opt-group">
+    <label for="fpsSelect">帧率</label>
+    <select id="fpsSelect">
+      <option value="15">15 fps</option>
+      <option value="24">24 fps</option>
+      <option value="30" selected>30 fps</option>
+      <option value="60">60 fps</option>
+    </select>
+  </div>
+  <div class="opt-group">
+    <label for="countdownSelect">倒计时</label>
+    <select id="countdownSelect">
+      <option value="0">关闭</option>
+      <option value="3" selected>3 秒</option>
+      <option value="5">5 秒</option>
+      <option value="10">10 秒</option>
+    </select>
+  </div>
+  <div class="opt-group">
+    <label for="autoStopSelect">自动停止</label>
+    <select id="autoStopSelect">
+      <option value="0" selected>不自动停止</option>
+      <option value="60">1 分钟后</option>
+      <option value="300">5 分钟后</option>
+      <option value="600">10 分钟后</option>
+      <option value="900">15 分钟后</option>
+      <option value="1800">30 分钟后</option>
+      <option value="3600">1 小时后</option>
+      <option value="7200">2 小时后</option>
+    </select>
+  </div>
+  <div class="opt-group" id="opt-campos" style="display:none">
+    <label for="camPosSelect">摄像头位置</label>
+    <select id="camPosSelect">
+      <option value="br" selected>右下角</option>
+      <option value="bl">左下角</option>
+      <option value="tr">右上角</option>
+      <option value="tl">左上角</option>
+    </select>
+  </div>
+  <div class="opt-group" id="opt-camshape" style="display:none">
+    <label for="camShapeSelect">摄像头形状</label>
+    <select id="camShapeSelect">
+      <option value="round" selected>圆形</option>
+      <option value="rect">矩形</option>
+    </select>
+  </div>
+  <div class="opt-group" id="opt-camsize" style="display:none">
+    <label for="camSizeRange">摄像头大小</label>
+    <input type="range" id="camSizeRange" min="10" max="35" value="22" style="width:90px"/>
+  </div>
+  <div class="mic-toggle">
+    <label>麦克风</label>
+    <div class="mic-pill on" id="micToggle" role="switch" aria-checked="true" tabindex="0" title="切换麦克风开关（M）— 录制过程中也可使用">
+      <span class="mic-icon" id="micIcon">🎙️</span>
+      <span class="mic-label" id="micLabel">开启</span>
+      <div class="mic-track"><div class="mic-thumb"></div></div>
+    </div>
+  </div>
+</div>
+
+  </div>
+<!-- Advanced options -->
+<details class="adv" id="adv">
+  <summary>更多选项 — 设备、音频和工具</summary>
+  <div class="options">
+    <div class="opt-group">
+      <label for="micSelect">麦克风设备</label>
+      <select id="micSelect"><option value="">默认麦克风</option></select>
+    </div>
+    <div class="opt-group">
+      <label for="micVolume">麦克风音量 <span id="micVolLabel">100%</span></label>
+      <input type="range" id="micVolume" min="0" max="200" value="100" style="width:130px"/>
+    </div>
+    <div class="opt-group">
+      <label for="camSelect">摄像头设备</label>
+      <select id="camSelect"><option value="">默认摄像头</option></select>
+    </div>
+  </div>
+  <div class="options">
+    <div class="chk-grid">
+      <label class="chk"><input type="checkbox" id="nsChk" checked/> 降噪</label>
+      <label class="chk"><input type="checkbox" id="ecChk" checked/> 回声消除</label>
+      <label class="chk"><input type="checkbox" id="agChk" checked/> 自动增益</label>
+      <label class="chk"><input type="checkbox" id="mirrorChk" checked/> 镜像摄像头画面</label>
+      <label class="chk" id="sysAudioLbl"><input type="checkbox" id="sysAudioChk"/> <span id="sysAudioText">同时录制系统声音</span></label>
+      <label class="chk" title="通过画布录制，允许你在实时预览上绘图，会稍微增加 CPU 占用。"><input type="checkbox" id="drawInScreenChk"/> 仅录屏模式启用绘图工具</label>
+      <label class="chk desktop-only" title="录制时隐藏录制窗口。关闭后可在实时预览上使用绘图工具。"><input type="checkbox" id="minimizeChk" checked/> 录制时最小化软件</label>
+      <label class="chk desktop-only" title="录制整块屏幕并显示透明悬浮工具栏，工具栏默认不挡住 PDF 操作。"><input type="checkbox" id="presentationChk"/> 悬浮演示模式（可边录边涂鸦）</label>
+    </div>
+  </div>
+  <div class="options desktop-only">
+    <div class="folder-line">
+      <span>保存目录：</span> <code id="saveDirLabel">—</code>
+      <button class="btn btn-ghost btn-sm" id="chooseFolderBtn">更改…</button>
+      <button class="btn btn-ghost btn-sm" id="openFolderBtn">打开</button>
+    </div>
+  </div>
+</details>
+
+  <div class="nav"><button class="btn btn-ghost btn-lg" id="back1" type="button">← 返回</button><button class="btn btn-primary btn-lg" id="to3" type="button">继续 →</button></div>
+</section>
+
+<!-- STEP 3 -->
+<section class="step" data-step="3">
+  <h1>准备<em>开始录制</em></h1>
+  <p class="lead">点击“开始”，选择要共享的内容，然后进入倒计时。</p>
+<!-- Step-by-step instructions -->
+<div id="instr"></div>
+
+  <div class="rec-stage">
+<!-- Controls -->
+<div class="ctrl-row">
+  <button class="btn btn-primary" id="startBtn">▶ 开始</button>
+  <button class="btn btn-warn"    id="pauseBtn"  disabled>⏸ 暂停</button>
+  <button class="btn btn-ghost"   id="resumeBtn" disabled>⏵ 继续</button>
+  <button class="btn btn-danger"  id="stopBtn"   disabled>⏹ 停止</button>
+  <button class="btn btn-ghost"   id="screenshotBtn" disabled title="截图（S）" aria-label="截图">📸</button>
+</div>
+
+<!-- Status + timer + meter -->
+<div class="status-bar">
+  <div class="rec-dot" id="recDot"></div>
+  <div id="status" role="status" aria-live="polite">准备就绪</div>
+  <div id="timer">00:00</div>
+  <div id="meter-wrap">
+    <span>音频</span>
+    <div id="meter"><div id="meter-bar"></div></div>
+  </div>
+</div>
+
+<!-- Live view -->
+<div id="view">
+  <div class="view-label" id="viewLabel">预览</div>
+  <video id="mainVideo" autoplay muted playsinline></video>
+  <canvas id="composite"></canvas>
+  <!-- Drawing/annotation toolbar -->
+  <div id="draw-bar">
+    <button class="draw-btn" data-tool="laser" title="激光笔" aria-label="激光笔">🔴</button>
+    <button class="draw-btn" data-tool="pen"   title="画笔" aria-label="画笔">✏️</button>
+    <button class="draw-btn" data-tool="hl"    title="荧光笔" aria-label="荧光笔">🖍️</button>
+    <button class="draw-btn" data-tool="arrow" title="箭头" aria-label="箭头">↗</button>
+    <button class="draw-btn" data-tool="rect"  title="矩形" aria-label="矩形">▭</button>
+    <button class="draw-btn" id="undoBtn"  title="撤销（Ctrl+Z）" aria-label="撤销">↶</button>
+    <button class="draw-btn" id="clearBtn" title="清除全部绘图" aria-label="清除绘图">🗑️</button>
+    <div class="color-dot" id="colorPick" style="background:#ff6584" title="颜色"></div>
+    <input type="color" id="colorInput" value="#ff6584" style="display:none"/>
+  </div>
+</div>
+
+<!-- Keyboard hints -->
+<div class="keys">
+  <kbd>Space</kbd> 暂停/继续 &nbsp;
+  <kbd>Esc</kbd> 停止 &nbsp;
+  <kbd>S</kbd> 截图 &nbsp;
+  <kbd>M</kbd> 静音麦克风 &nbsp;
+  <kbd>Ctrl</kbd>+<kbd>Z</kbd> 撤销绘图
+  <div class="desktop-only" id="globalKeys"></div>
+</div>
+
+  </div>
+  <div class="nav"><button class="btn btn-ghost btn-lg" id="back2" type="button">← 返回</button><span></span></div>
+</section>
+
+<!-- Countdown overlay -->
+<div id="countdown"></div>
+
+<!-- Source picker (desktop app) -->
+<div class="modal" id="source-modal">
+  <div class="modal-box">
+    <h3>选择录制内容</h3>
+    <div class="tabs">
+      <button class="tab active" data-kind="screen" type="button">屏幕</button>
+      <button class="tab" data-kind="window" type="button">窗口</button>
+    </div>
+    <div id="source-grid"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="srcCancel">取消</button>
+      <button class="btn btn-primary" id="srcOk" disabled>▶ 开始录制</button>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 4: save (was a modal) -->
+<div class="modal" id="preview-modal" data-step="4">
+  <div class="modal-box">
+    <h1>录制<em>完成</em></h1>
+    <p class="lead">你可以预览、剪辑，然后保存视频。</p>
+    <video id="previewVid" controls></video>
+    <div class="no-preview" id="noPreview" hidden>录制文件太大，无法预览，但仍可在下方导出。</div>
+    <div class="modal-meta">
+      <span class="fmt-badge webm">WebM</span>
+      <span id="recSize"></span>
+      <span id="recDur"></span>
+    </div>
+
+    <!-- Trim (desktop app: done with the bundled ffmpeg) -->
+    <div class="tool-row desktop-only" id="trimRow">
+      <b>剪辑</b>
+      <label for="trimStart">开始</label><input type="number" id="trimStart" min="0" step="0.1" value="0"/>
+      <button class="btn btn-ghost btn-sm" id="setStartBtn" title="使用当前播放位置">⇤ 设置</button>
+      <label for="trimEnd">结束</label><input type="number" id="trimEnd" min="0" step="0.1" placeholder="结束"/>
+      <button class="btn btn-ghost btn-sm" id="setEndBtn" title="使用当前播放位置">⇥ 设置</button>
+      <button class="btn btn-ghost btn-sm" id="resetTrimBtn">重置</button>
+      <span class="info" id="trimInfo"></span>
+    </div>
+    <div class="tool-row desktop-only">
+      <b>GIF</b>
+      <label for="gifFpsSelect">帧率</label>
+      <select id="gifFpsSelect">
+        <option value="8">8 fps</option><option value="12">12 fps</option>
+        <option value="15" selected>15 fps</option><option value="20">20 fps</option>
+      </select>
+      <label for="gifWidthSelect">宽度</label>
+      <select id="gifWidthSelect">
+        <option value="480">480 px</option><option value="640" selected>640 px</option>
+        <option value="800">800 像素</option><option value="0">原始尺寸</option>
+      </select>
+      <label class="chk info"><input type="checkbox" id="askWhereChk" checked/> 保存前询问位置</label>
+    </div>
+
+    <div class="progress" id="exportProgress" hidden>
+      <div class="bar" id="exportBarWrap"><div id="exportBar"></div></div>
+      <span id="exportText">正在导出…</span>
+      <button class="btn btn-ghost btn-sm" id="exportCancelBtn">取消</button>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost"   id="discardBtn">🗑 放弃</button>
+      <button class="btn btn-ghost"   id="dlGifBtn">⬇ 保存为 GIF</button>
+      <button class="btn btn-ghost"   id="dlWebmBtn">⬇ 保存为 WebM</button>
+      <button class="btn btn-primary" id="dlMp4Btn">⬇ 保存为 MP4</button>
+    </div>
+    <div id="mp4Unavail">⚠ MP4/GIF 导出、剪辑和自动保存需要桌面版</div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<!-- Toast -->
+<div id="toast" role="status" aria-live="polite"><span id="toastText"></span><button id="toastAction" hidden></button></div>
+
+<script>
+'use strict';
+// ── Environment ───────────────────────────────────────────────────────
+// `window.electronAPI` only exists in the desktop app (see preload.js); the same page
+// also runs as a plain web app on GitHub Pages, so every desktop feature is optional.
+const api = window.electronAPI || null;
+const IS_DESKTOP = !!api;
+document.documentElement.classList.toggle('is-desktop', IS_DESKTOP);
+
+// ── DOM refs ──────────────────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const startBtn     = $('startBtn'),    pauseBtn    = $('pauseBtn');
+const resumeBtn    = $('resumeBtn'),   stopBtn     = $('stopBtn');
+const screenshotBtn= $('screenshotBtn');
+const statusEl     = $('status'),      timerEl     = $('timer');
+const recDot       = $('recDot'),      meterWrap   = $('meter-wrap');
+const meterEl      = $('meter'),       meterBar    = $('meter-bar');
+const countdownEl  = $('countdown');
+const instrEl      = $('instr'),       viewEl      = $('view');
+const mainVideo    = $('mainVideo'),   composite   = $('composite');
+const ctx          = composite.getContext('2d');
+const viewLabel    = $('viewLabel');
+const drawBar      = $('draw-bar');
+const previewModal = $('preview-modal'), previewVid = $('previewVid');
+const sourceModal  = $('source-modal');
+const dlWebmBtn    = $('dlWebmBtn'),   dlMp4Btn    = $('dlMp4Btn'), dlGifBtn = $('dlGifBtn');
+const discardBtn   = $('discardBtn');
+const colorDot     = $('colorPick'),   colorInput  = $('colorInput');
+const qualitySelect= $('qualitySelect'), fpsSelect = $('fpsSelect');
+const countdownSelect = $('countdownSelect'), autoStopSelect = $('autoStopSelect');
+const micSelect    = $('micSelect'),   camSelect   = $('camSelect');
+const micVolume    = $('micVolume');
+const nsChk = $('nsChk'), ecChk = $('ecChk'), agChk = $('agChk'), mirrorChk = $('mirrorChk');
+const sysAudioChk = $('sysAudioChk'), drawInScreenChk = $('drawInScreenChk'), minimizeChk = $('minimizeChk'), presentationChk = $('presentationChk');
+const askWhereChk = $('askWhereChk');
+const trimStart = $('trimStart'), trimEnd = $('trimEnd'), trimInfo = $('trimInfo');
+const gifFpsSelect = $('gifFpsSelect'), gifWidthSelect = $('gifWidthSelect');
+
+// ── Guided steps ──────────────────────────────────────────────────────
+let curStep = 1;
+function goStep(n){
+  const changed = n !== curStep; curStep = n;
+  document.querySelectorAll('.step').forEach(el => el.classList.toggle('on', Number(el.dataset.step) === n));
+  document.querySelectorAll('#steps li').forEach((li, i) => { li.classList.toggle('now', i === n - 1); li.classList.toggle('done', i < n - 1); });
+  if(changed) window.scrollTo({ top: 0 });
+}
+$('to2').addEventListener('click',  () => goStep(2));
+$('back1').addEventListener('click', () => goStep(1));
+$('to3').addEventListener('click',  () => goStep(3));
+$('back2').addEventListener('click', () => { if(recState === 'idle') goStep(2); });
+
+// ── Persistent settings ───────────────────────────────────────────────
+const SETTINGS_KEY = 'srp.settings.v1';
+let saved = {};
+try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (_) { saved = {}; }
+function persist(){ try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(saved)); } catch (_) { /* private mode etc. */ } }
+
+// Restores a control from saved settings (ignoring values a <select> no longer offers)
+// and saves it again whenever the user changes it.
+function bind(el, key){
+  const isCheck = el.type === 'checkbox';
+  if(saved[key] !== undefined){
+    if(isCheck) el.checked = !!saved[key];
+    else if(el.tagName !== 'SELECT' || [...el.options].some(o => o.value === String(saved[key]))) el.value = saved[key];
+  }
+  el.addEventListener('change', () => { saved[key] = isCheck ? el.checked : el.value; persist(); });
+}
+[
+  [qualitySelect,'quality'], [fpsSelect,'fps'], [countdownSelect,'countdown'], [autoStopSelect,'autoStop'],
+  [$('camPosSelect'),'camPos'], [$('camShapeSelect'),'camShape'], [$('camSizeRange'),'camSize'],
+  [micVolume,'micVolume'], [nsChk,'ns'], [ecChk,'ec'], [agChk,'ag'], [mirrorChk,'mirror'],
+  [sysAudioChk,'sysAudio'], [drawInScreenChk,'drawInScreen'], [minimizeChk,'minimize'], [presentationChk,'presentation'],
+  [askWhereChk,'askWhere'], [gifFpsSelect,'gifFps'], [gifWidthSelect,'gifWidth'],
+].forEach(([el, key]) => bind(el, key));
+
+// ── State ─────────────────────────────────────────────────────────────
+// NOTE: we deliberately do NOT use MediaRecorder's native "video/mp4" mode.
+// That mode only produces a fragmented MP4 with no finalized moov/duration
+// table — most players, editors, and upload targets (Google Photos, Drive,
+// video editors) only read the first fragment (~a few seconds) and treat
+// the rest of the file as corrupt. Instead we always record reliably to
+// WebM, then transcode to a real, fully-indexed, faststart MP4 via ffmpeg
+// in the Electron main process (see lib/ffmpeg-args.js + main.js "export:run").
+let recState = 'idle';               // idle | starting | recording | paused | stopping
+let cancelStart = false;
+let recWebm = null, chunksWebm = [], blobWebm = null;
+let screenStream = null, camStream = null, micStream = null, audioCtx = null;
+let micGainNode = null, analyser = null;
+let vfcHandles = [];                 // requestVideoFrameCallback handles (one per source video)
+let lastScreenVid = null, lastCamVid = null, lastRender = 0, minFrameMs = 25;
+let timerIntvl = null, meterRaf = null;
+let recStartPerf = 0, pausedAccum = 0, pauseStartedPerf = 0, recordedSeconds = 0, autoStopSec = 0;
+// Desktop only: chunks are mirrored to disk as they arrive (crash recovery, big-file export).
+let recId = null, diskOk = false, diskQueue = Promise.resolve();
+let hasSaved = false, exporting = false, lastSavedPath = null;
+let micOn = saved.micOn !== undefined ? !!saved.micOn : true;
+
+// ── Toast ─────────────────────────────────────────────────────────────
+let toastTimer = null;
+function hideToast(){ $('toast').classList.remove('show'); }
+function toast(text, actionLabel, actionFn, ms = 6000){
+  $('toastText').textContent = text;
+  const btn = $('toastAction');
+  if(actionLabel){
+    btn.hidden = false; btn.textContent = actionLabel;
+    btn.onclick = () => { hideToast(); actionFn && actionFn(); };
+  } else { btn.hidden = true; btn.onclick = null; }
+  $('toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, ms);
+}
+
+// ── Mic toggle (works live while recording — it drives a GainNode) ────
+function micVol(){ return (parseInt(micVolume.value, 10) || 0) / 100; }
+function renderMic(){
+  const el = $('micToggle');
+  el.classList.toggle('on',  micOn);
+  el.classList.toggle('off', !micOn);
+  el.setAttribute('aria-checked', String(micOn));
+  $('micIcon').textContent  = micOn ? '🎙️' : '🔇';
+  $('micLabel').textContent = micOn ? '开启' : '关闭';
+}
+function toggleMic(){
+  const active = recState === 'recording' || recState === 'paused';
+  // A recording that started without a mic has nothing to un-mute.
+  if(active && !micGainNode){ toast('本次录制开始时未启用麦克风。'); return; }
+  micOn = !micOn;
+  saved.micOn = micOn; persist();
+  renderMic();
+  if(micGainNode) micGainNode.gain.value = micOn ? micVol() : 0;
+  if(active) toast(micOn ? '麦克风已开启' : '麦克风已静音', null, null, 1500);
+}
+$('micToggle').addEventListener('click', toggleMic);
+$('micToggle').addEventListener('keydown', e => { if(e.code === 'Enter'){ e.preventDefault(); toggleMic(); } });
+micVolume.addEventListener('input', () => {
+  $('micVolLabel').textContent = micVol() * 100 + '%';
+  if(micGainNode && micOn) micGainNode.gain.value = micVol();
+});
+$('micVolLabel').textContent = Math.round(micVol() * 100) + '%';
+renderMic();
+
+// ── Mode UI ───────────────────────────────────────────────────────────
+function instrFor(m){
+  if(m === 'camera') return '';
+  if(IS_DESKTOP){
+    const both = m === 'both';
+    const hudTip = presentationChk && presentationChk.checked
+      ? '<br>录制时主窗口会最小化，顶部悬浮工具栏默认穿透；选择画笔后即可在 PDF 上涂鸦，10 秒无操作会自动收起。'
+      : '';
+    return `<b>${both ? '屏幕 + 摄像头' : '仅录屏幕'}步骤：</b><br>
+      1. 点击 <b>▶ 开始</b>（或在任意位置按 <b>Ctrl+Shift+F9</b>）<br>
+      2. 选择要录制的<b>屏幕或窗口</b> → <b>开始录制</b>${both ? ' → 允许摄像头权限' : ''}<br>
+      3. 软件会最小化以避免录入自身画面，接下来正常操作<br>
+      4. 使用 <b>Ctrl+Shift+F9</b> 或托盘图标停止 → 预览、剪辑并保存为 MP4 / GIF / WebM${hudTip}`;
+  }
+  if(m === 'screen') return `<b>仅录屏幕步骤：</b><br>
+    1. 点击 <b>▶ 开始</b> → 打开共享窗口<br>
+    2. 选择要录制的屏幕或窗口<br>
+    3. 允许麦克风权限 → 倒计时 → 开始录制<br>
+    4. 正常操作，录制会在后台继续<br>
+    5. 返回此窗口 → <b>⏹ 停止</b> → 预览 → 保存`;
+  return `<b>屏幕 + 摄像头步骤：</b><br>
+    1. 点击 <b>▶ 开始</b> → 打开共享窗口<br>
+    2. 选择要录制的屏幕或窗口<br>
+    <span class="warn">⚠ 不要选择当前录制窗口，否则会产生镜像循环</span><br>
+    3. 允许摄像头和麦克风权限 → 倒计时<br>
+    4. 正常操作，摄像头画面会覆盖在屏幕上<br>
+    5. 返回此窗口 → <b>⏹ 停止</b> → 预览 → 保存合成视频`;
+}
+
+function getMode(){ return document.querySelector('input[name="mode"]:checked').value }
+
+function setMode(m){
+  const radio = document.querySelector(`input[name="mode"][value="${m}"]`);
+  if(!radio) return;
+  radio.checked = true;
+  document.querySelectorAll('.mode-card').forEach(c => c.classList.toggle('active', c.contains(radio)));
+  const html = instrFor(m);
+  instrEl.innerHTML = html;
+  instrEl.style.display = html ? 'block' : 'none';
+  ['opt-campos','opt-camshape','opt-camsize'].forEach(id => { $(id).style.display = m === 'both' ? 'flex' : 'none'; });
+  saved.mode = m; persist();
+}
+document.querySelectorAll('.mode-card').forEach(card => {
+  card.addEventListener('click', () => {
+    if(recState !== 'idle') return; // can't switch modes mid-recording
+    setMode(card.querySelector('input').value);
+  });
+});
+setMode(['screen','camera','both'].includes(saved.mode) ? saved.mode : 'screen');
+if(IS_DESKTOP) $('descScreen').textContent = '任意屏幕或窗口';
+
+// ── Helpers ───────────────────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function setStatus(s){ statusEl.textContent = s }
+function fmtSize(bytes){ return (bytes/1024/1024).toFixed(1)+' MB'; }
+function stamp(d = new Date()){
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+}
+function fmtTime(s){
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  const mm = String(m).padStart(2,'0'), ss = String(sec).padStart(2,'0');
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+function abortError(){ const e = new Error('Cancelled'); e.name = 'AbortError'; return e; }
+function friendly(err){
+  switch(err && err.name){
+    case 'AbortError':    return '已取消';
+    case 'NotAllowedError': return '权限被拒绝或操作已取消';
+    case 'NotFoundError': return '未找到摄像头或麦克风';
+    case 'NotReadableError': return '摄像头或麦克风正被其他应用占用';
+    default: return '错误：' + ((err && err.message) || err);
+  }
+}
+
+// ── Timer ─────────────────────────────────────────────────────────────
+// Based on performance.now(), not on counting setInterval ticks: browsers throttle
+// timers in background tabs (to once a minute after a while), which would make a
+// tick-counting timer — and the auto-stop — drift badly during long recordings.
+function elapsedMs(){
+  if(!recStartPerf) return 0;
+  return (pauseStartedPerf || performance.now()) - recStartPerf - pausedAccum;
+}
+function tickTimer(){
+  const s = Math.floor(elapsedMs() / 1000);
+  timerEl.textContent = fmtTime(s);
+  if(autoStopSec && s >= autoStopSec && recState === 'recording'){
+    toast('已达到自动停止时间');
+    stop();
+  }
+}
+function startTimer(){
+  recStartPerf = performance.now(); pausedAccum = 0; pauseStartedPerf = 0;
+  timerEl.textContent = '00:00';
+  timerEl.style.display = 'block';
+  recDot.style.display = 'block';
+  clearInterval(timerIntvl);
+  timerIntvl = setInterval(tickTimer, 250);
+}
+function stopTimer(){
+  clearInterval(timerIntvl); timerIntvl = null;
+  timerEl.style.display = 'none';
+  recDot.style.display = 'none';
+  recStartPerf = 0; pausedAccum = 0; pauseStartedPerf = 0;
+}
+
+function runCountdown(n){
+  return new Promise((resolve, reject) => {
+    countdownEl.style.display = 'flex';
+    const render = () => { countdownEl.innerHTML = `${n}<small>按 Esc 取消</small>`; };
+    render();
+    const t = setInterval(() => {
+      if(cancelStart){ clearInterval(t); countdownEl.style.display = 'none'; reject(abortError()); return; }
+      n--;
+      if(n <= 0){ clearInterval(t); countdownEl.style.display = 'none'; resolve(); }
+      else render();
+    }, 1000);
+  });
+}
+
+function waitForVideo(vid){
+  return new Promise(resolve => {
+    const check = () => (vid.videoWidth > 0 && vid.videoHeight > 0) ? resolve() : setTimeout(check, 50);
+    check();
+  });
+}
+
+async function makeOffscreenVideo(stream){
+  const v = document.createElement('video');
+  v.srcObject = stream; v.muted = true; v.playsInline = true;
+  await v.play();
+  await waitForVideo(v);
+  return v;
+}
+
+// ── Devices ───────────────────────────────────────────────────────────
+function fillDevices(select, devices, fallbackLabel, wanted){
+  const prev = wanted !== undefined ? wanted : select.value;
+  select.innerHTML = '';
+  select.add(new Option(fallbackLabel === 'mic' ? '默认麦克风' : '默认摄像头', ''));
+  let n = 0;
+  devices.forEach(d => {
+    // "default"/"communications" are virtual aliases Chrome adds on Windows
+    if(d.deviceId === 'default' || d.deviceId === 'communications') return;
+    n++;
+    select.add(new Option(d.label || `${fallbackLabel === 'mic' ? '麦克风' : '摄像头'} ${n}`, d.deviceId));
+  });
+  if([...select.options].some(o => o.value === prev)) select.value = prev;
+}
+async function refreshDevices(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  try{
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    fillDevices(micSelect, devs.filter(d => d.kind === 'audioinput'), 'mic', micSelect.value || saved.micDevice || '');
+    fillDevices(camSelect, devs.filter(d => d.kind === 'videoinput'), 'cam', camSelect.value || saved.camDevice || '');
+  }catch(_){ /* leave defaults */ }
+}
+micSelect.addEventListener('change', () => { saved.micDevice = micSelect.value; persist(); });
+camSelect.addEventListener('change', () => { saved.camDevice = camSelect.value; persist(); });
+if(navigator.mediaDevices && navigator.mediaDevices.addEventListener){
+  navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
+}
+refreshDevices();
+
+function micConstraints(){
+  const c = { noiseSuppression: nsChk.checked, echoCancellation: ecChk.checked, autoGainControl: agChk.checked };
+  if(micSelect.value) c.deviceId = { exact: micSelect.value };
+  return c;
+}
+function camConstraints(){
+  const c = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+  if(camSelect.value) c.deviceId = { exact: camSelect.value };
+  return c;
+}
+function withoutDeviceIds(constraints){
+  const out = {};
+  for(const k of Object.keys(constraints)){
+    const v = constraints[k];
+    if(v && typeof v === 'object'){ const { deviceId, ...rest } = v; out[k] = rest; } else out[k] = v;
+  }
+  return out;
+}
+// getUserMedia that falls back to the default device if the remembered one is gone.
+async function gum(constraints){
+  try{
+    const s = await navigator.mediaDevices.getUserMedia(constraints);
+    refreshDevices(); // labels become available once permission is granted
+    return s;
+  }catch(err){
+    const usedId = Object.values(constraints).some(v => v && typeof v === 'object' && v.deviceId);
+    if(usedId && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError')){
+      toast('找不到所选设备，将使用默认设备。');
+      return navigator.mediaDevices.getUserMedia(withoutDeviceIds(constraints));
+    }
+    throw err;
+  }
+}
+
+// ── Audio mixer (always through AudioContext — never raw tracks to MediaRecorder) ──
+function buildAudioGraph({ mic, system }){
+  const micTracks = mic ? mic.getAudioTracks() : [];
+  const sysTracks = system ? system.getAudioTracks() : [];
+  if(!micTracks.length && !sysTracks.length) return null;
+
+  audioCtx = new AudioContext();
+  if(audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  const dest = audioCtx.createMediaStreamDestination();
+
+  // Analyser for the meter is a dead end — it is NOT connected to the speakers.
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 1024;
+  const bus = audioCtx.createGain();
+  bus.connect(dest);
+  bus.connect(analyser);
+
+  if(micTracks.length){
+    micGainNode = audioCtx.createGain();
+    micGainNode.gain.value = micOn ? micVol() : 0;
+    audioCtx.createMediaStreamSource(new MediaStream(micTracks)).connect(micGainNode);
+    micGainNode.connect(bus);
+  }
+  if(sysTracks.length){
+    audioCtx.createMediaStreamSource(new MediaStream(sysTracks)).connect(bus);
+  }
+  return dest.stream.getAudioTracks()[0] || null;
+}
+
+let clipUntil = 0;
+function startMeter(){
+  if(!analyser) return;
+  const buf = new Float32Array(analyser.fftSize);
+  meterWrap.style.display = 'flex';
+  const tick = () => {
+    analyser.getFloatTimeDomainData(buf);
+    let sum = 0, peak = 0;
+    for(let i = 0; i < buf.length; i++){ const v = buf[i]; sum += v*v; const a = Math.abs(v); if(a > peak) peak = a; }
+    const rms = Math.sqrt(sum / buf.length);
+    // Map -60 dB … 0 dB onto the bar (a more honest scale than averaging FFT bins).
+    const db = rms > 0 ? 20 * Math.log10(rms) : -100;
+    meterBar.style.width = Math.max(0, Math.min(1, (db + 60) / 60)) * 100 + '%';
+    const now = performance.now();
+    if(peak >= 0.99) clipUntil = now + 1200;
+    meterEl.classList.toggle('clip', now < clipUntil);
+    meterRaf = requestAnimationFrame(tick);
+  };
+  meterRaf = requestAnimationFrame(tick);
+}
+function stopMeter(){
+  if(meterRaf) cancelAnimationFrame(meterRaf);
+  meterRaf = null;
+  meterWrap.style.display = 'none';
+  meterBar.style.width = '0%';
+  meterEl.classList.remove('clip');
+}
+
+// ── Annotations (persistent strokes + fading laser) ───────────────────
+// Everything is stored as data and re-drawn on every composited frame. (Painting
+// straight onto the canvas would be wiped by the next video frame.)
+let drawMode = null;                 // 'laser' | 'pen' | 'hl' | 'arrow' | 'rect' | null
+let drawColor = '#ff6584';
+const annos = [];
+let curAnno = null, laserPos = null;
+const laserTrail = [];
+const LASER_FADE_MS = 700;
+
+const strokeW = () => Math.max(3, Math.round(4 * composite.width / 1280));
+
+function canvasPoint(e){
+  const r = composite.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * composite.width / r.width, y: (e.clientY - r.top) * composite.height / r.height };
+}
+function strokePath(c, pts){
+  if(!pts.length) return;
+  c.beginPath();
+  c.moveTo(pts[0].x, pts[0].y);
+  if(pts.length === 1) c.lineTo(pts[0].x + 0.01, pts[0].y);
+  for(let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+  c.stroke();
+}
+function paintAnno(c, a){
+  c.save();
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  c.strokeStyle = a.color; c.fillStyle = a.color;
+  if(a.tool === 'pen'){
+    c.lineWidth = a.w; strokePath(c, a.pts);
+  } else if(a.tool === 'hl'){
+    c.globalAlpha = 0.35; c.lineWidth = a.w * 4; c.lineCap = 'butt'; strokePath(c, a.pts);
+  } else if(a.tool === 'rect'){
+    c.lineWidth = a.w;
+    c.strokeRect(Math.min(a.x1, a.x2), Math.min(a.y1, a.y2), Math.abs(a.x2 - a.x1), Math.abs(a.y2 - a.y1));
+  } else if(a.tool === 'arrow'){
+    const dx = a.x2 - a.x1, dy = a.y2 - a.y1, len = Math.hypot(dx, dy);
+    if(len > 2){
+      const ang = Math.atan2(dy, dx), head = Math.min(len * 0.5, a.w * 5);
+      c.lineWidth = a.w;
+      c.beginPath(); c.moveTo(a.x1, a.y1); c.lineTo(a.x2, a.y2); c.stroke();
+      c.beginPath();
+      c.moveTo(a.x2, a.y2);
+      c.lineTo(a.x2 - head * Math.cos(ang - 0.45), a.y2 - head * Math.sin(ang - 0.45));
+      c.lineTo(a.x2 - head * Math.cos(ang + 0.45), a.y2 - head * Math.sin(ang + 0.45));
+      c.closePath(); c.fill();
+    }
+  }
+  c.restore();
+}
+function paintLaser(c){
+  const now = performance.now();
+  while(laserTrail.length && now - laserTrail[0].t > LASER_FADE_MS) laserTrail.shift();
+  c.save();
+  c.lineCap = 'round'; c.strokeStyle = drawColor; c.fillStyle = drawColor;
+  for(let i = 1; i < laserTrail.length; i++){
+    const age = (now - laserTrail[i].t) / LASER_FADE_MS;
+    c.globalAlpha = Math.max(0, 1 - age) * 0.8;
+    c.lineWidth = strokeW() * 2 * (1 - age * 0.6);
+    c.beginPath(); c.moveTo(laserTrail[i-1].x, laserTrail[i-1].y); c.lineTo(laserTrail[i].x, laserTrail[i].y); c.stroke();
+  }
+  if(laserPos){
+    const r = strokeW() * 3;
+    const g = c.createRadialGradient(laserPos.x, laserPos.y, 0, laserPos.x, laserPos.y, r * 2.2);
+    g.addColorStop(0, drawColor); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.globalAlpha = 0.9; c.fillStyle = g;
+    c.beginPath(); c.arc(laserPos.x, laserPos.y, r * 2.2, 0, Math.PI * 2); c.fill();
+    c.globalAlpha = 1; c.fillStyle = '#fff';
+    c.beginPath(); c.arc(laserPos.x, laserPos.y, r * 0.5, 0, Math.PI * 2); c.fill();
+  }
+  c.restore();
+}
+
+// ── Canvas compositor (requestVideoFrameCallback — background-tab safe) ─
+function camRect(cw, ch){
+  const pct = parseInt($('camSizeRange').value) / 100;
+  const w = Math.round(composite.width * pct);
+  const h = Math.round(w * (ch / cw));
+  const pos = $('camPosSelect').value;
+  const pad = 16;
+  const x = pos.includes('r') ? composite.width  - w - pad : pad;
+  const y = pos.includes('b') ? composite.height - h - pad : pad;
+  return {x, y, w, h};
+}
+
+function drawCamOverlay(camVid){
+  const {x, y, w, h} = camRect(camVid.videoWidth, camVid.videoHeight);
+  const shape = $('camShapeSelect').value;
+  const outline = () => {
+    ctx.beginPath();
+    if(shape === 'round') ctx.arc(x + w/2, y + h/2, Math.min(w,h)/2, 0, Math.PI*2);
+    else ctx.roundRect(x, y, w, h, 10);
+  };
+
+  ctx.save();
+  outline();
+  ctx.clip();
+  if(mirrorChk.checked){
+    ctx.translate(x + w, y); ctx.scale(-1, 1);
+    ctx.drawImage(camVid, 0, 0, w, h);
+  } else {
+    ctx.drawImage(camVid, x, y, w, h);
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 3;
+  outline();
+  ctx.stroke();
+}
+
+function renderFrame(force = false){
+  if(!lastScreenVid) return;
+  const now = performance.now();
+  // Screen and camera both call this; skip the redundant one when they fire together.
+  if(!force && now - lastRender < minFrameMs) return;
+  lastRender = now;
+  ctx.drawImage(lastScreenVid, 0, 0, composite.width, composite.height);
+  for(const a of annos) paintAnno(ctx, a);
+  if(curAnno) paintAnno(ctx, curAnno);
+  paintLaser(ctx);
+  if(lastCamVid) drawCamOverlay(lastCamVid);
+}
+
+// Repaint on demand (drawing, laser fade) — needed because a static screen would
+// otherwise not deliver new video frames to redraw on. Only runs while the user interacts.
+let renderQueued = false;
+function scheduleRender(){
+  if(renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    renderFrame(true);
+    if(laserTrail.length) scheduleRender(); // keep animating the fade
+  });
+}
+
+function startDraw(screenVid, camVid){
+  lastScreenVid = screenVid; lastCamVid = camVid; lastRender = 0;
+  const hook = vid => {
+    const h = { vid, id: null };
+    const cb = () => { renderFrame(); h.id = vid.requestVideoFrameCallback(cb); };
+    h.id = vid.requestVideoFrameCallback(cb);
+    vfcHandles.push(h);
+  };
+  renderFrame(true);
+  hook(screenVid);
+  // The camera drives the loop too, so the face overlay stays smooth even when the
+  // screen is static and delivers few frames.
+  if(camVid) hook(camVid);
+}
+function stopDraw(){
+  vfcHandles.forEach(h => { try { h.vid.cancelVideoFrameCallback(h.id); } catch(_) {} });
+  vfcHandles = [];
+  lastScreenVid = lastCamVid = null;
+}
+
+// ── Draw tools UI ─────────────────────────────────────────────────────
+function enableDrawing(){ composite.style.cursor = 'crosshair'; drawBar.style.display = 'flex'; }
+function disableDrawing(){
+  composite.style.cursor = ''; drawBar.style.display = 'none';
+  setTool(null);
+}
+function setTool(t){
+  drawMode = t;
+  document.querySelectorAll('.draw-btn[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
+  if(t !== 'laser'){ laserPos = null; }
+  composite.style.cursor = t ? 'crosshair' : '';
+}
+document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
+  btn.addEventListener('click', () => setTool(drawMode === btn.dataset.tool ? null : btn.dataset.tool));
+});
+function undoAnno(){ annos.pop(); scheduleRender(); }
+$('undoBtn').addEventListener('click', undoAnno);
+$('clearBtn').addEventListener('click', () => { annos.length = 0; curAnno = null; scheduleRender(); });
+colorDot.addEventListener('click', () => colorInput.click());
+colorInput.addEventListener('input', e => {
+  drawColor = e.target.value;
+  colorDot.style.background = drawColor;
+});
+
+composite.addEventListener('pointerdown', e => {
+  if(!drawMode || drawMode === 'laser') return;
+  composite.setPointerCapture(e.pointerId);
+  const p = canvasPoint(e);
+  curAnno = { tool: drawMode, color: drawColor, w: strokeW(), pts: [p], x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+  scheduleRender();
+});
+composite.addEventListener('pointermove', e => {
+  if(drawMode === 'laser'){
+    const p = canvasPoint(e);
+    laserPos = p;
+    laserTrail.push({ x: p.x, y: p.y, t: performance.now() });
+    if(laserTrail.length > 80) laserTrail.shift();
+    scheduleRender();
+    return;
+  }
+  if(!curAnno) return;
+  const p = canvasPoint(e);
+  if(curAnno.tool === 'pen' || curAnno.tool === 'hl') curAnno.pts.push(p);
+  else { curAnno.x2 = p.x; curAnno.y2 = p.y; }
+  scheduleRender();
+});
+function endStroke(){
+  if(!curAnno) return;
+  annos.push(curAnno);
+  curAnno = null;
+  scheduleRender();
+}
+composite.addEventListener('pointerup', endStroke);
+composite.addEventListener('pointercancel', endStroke);
+composite.addEventListener('pointerleave', () => { if(drawMode === 'laser'){ laserPos = null; scheduleRender(); } });
+
+// The desktop HUD is a separate transparent window. It forwards normalized screen
+// coordinates here so drawing still lands on the composited recording while the PDF
+// underneath remains a normal, clickable application.
+function hudPoint(p){
+  if(!composite.width || !composite.height) return null;
+  return { x: Math.max(0, Math.min(composite.width, Number(p.nx) * composite.width)),
+    y: Math.max(0, Math.min(composite.height, Number(p.ny) * composite.height)) };
+}
+function handleHudPointer(p){
+  if(!drawMode) return;
+  const point = hudPoint(p);
+  if(!point) return;
+  if(p.type === 'move' && drawMode === 'laser'){
+    laserPos = point;
+    laserTrail.push({ x: point.x, y: point.y, t: performance.now() });
+    if(laserTrail.length > 80) laserTrail.shift();
+    scheduleRender();
+    return;
+  }
+  if(p.type === 'down' && drawMode !== 'laser'){
+    curAnno = { tool: drawMode, color: drawColor, w: strokeW(), pts: [point], x1: point.x, y1: point.y, x2: point.x, y2: point.y };
+    scheduleRender();
+  } else if(p.type === 'move' && curAnno){
+    if(curAnno.tool === 'pen' || curAnno.tool === 'hl') curAnno.pts.push(point);
+    else { curAnno.x2 = point.x; curAnno.y2 = point.y; }
+    scheduleRender();
+  } else if((p.type === 'up' || p.type === 'cancel') && drawMode !== 'laser'){
+    endStroke();
+  }
+}
+function handleHudAction(action = {}){
+  if(action.type === 'tool') setTool(action.tool || null);
+  else if(action.type === 'undo') undoAnno();
+  else if(action.type === 'clear'){ annos.length = 0; curAnno = null; scheduleRender(); }
+  else if(action.type === 'stop') stop();
+  else if(action.type === 'pause'){ if(recState === 'recording') pause(); else if(recState === 'paused') resume(); }
+  else if(action.type === 'screenshot') takeScreenshot();
+}
+
+// ── Screenshot ────────────────────────────────────────────────────────
+async function takeScreenshot(){
+  const useComposite = composite.style.display !== 'none';
+  const src = useComposite ? composite : mainVideo;
+  const w = useComposite ? composite.width : mainVideo.videoWidth;
+  const h = useComposite ? composite.height : mainVideo.videoHeight;
+  if(!w || !h) return;
+  const img = document.createElement('canvas');
+  img.width = w; img.height = h;
+  img.getContext('2d').drawImage(src, 0, 0, w, h);
+  const blob = await new Promise(r => img.toBlob(r, 'image/png'));
+  if(!blob) return;
+  const name = `Screenshot ${stamp()}.png`;
+
+  if(IS_DESKTOP){
+    try{
+      const res = await api.saveImage(await blob.arrayBuffer(), name, true);
+  toast(res.copied ? '截图已保存并复制到剪贴板' : '截图已保存', '打开所在文件夹', () => api.reveal(res.path));
+      return;
+    }catch(err){ toast('截图保存失败：' + err.message); return; }
+  }
+  let copied = false;
+  try{
+    if(navigator.clipboard && window.ClipboardItem){
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      copied = true;
+    }
+  }catch(_){ /* clipboard blocked — the download below still works */ }
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast(copied ? '截图已下载并复制到剪贴板' : '截图已下载');
+}
+
+// ── Source picker (desktop app) ───────────────────────────────────────
+let pickerKind = 'screen', pickerSources = [], pickerSelected = null, pickerResolve = null;
+let pickerWindowOnly = false, pickerScreenOnly = false;
+
+function finishPicker(result){
+  sourceModal.style.display = 'none';
+  const r = pickerResolve; pickerResolve = null;
+  if(r) r(result);
+}
+function renderPicker(){
+  const grid = $('source-grid');
+  grid.innerHTML = '';
+  document.querySelectorAll('#source-modal .tab').forEach(t => {
+    const hidden = (pickerWindowOnly && t.dataset.kind !== 'window') || (pickerScreenOnly && t.dataset.kind !== 'screen');
+    t.style.display = hidden ? 'none' : '';
+    t.classList.toggle('active', t.dataset.kind === pickerKind);
+    const n = pickerSources.filter(s => s.kind === t.dataset.kind).length;
+  t.textContent = (t.dataset.kind === 'screen' ? '屏幕' : '窗口') + ` (${n})`;
+  });
+  const list = pickerSources.filter(s => s.kind === pickerKind);
+  if(!list.length){
+    const d = document.createElement('div'); d.className = 'src-empty'; d.textContent = '这里没有可用内容。';
+    grid.appendChild(d); return;
+  }
+  list.forEach(s => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'src-card' + (pickerSelected && pickerSelected.id === s.id ? ' sel' : '');
+    if(s.thumbnail){ const im = document.createElement('img'); im.className = 'thumb'; im.src = s.thumbnail; im.alt = ''; card.appendChild(im); }
+    const nm = document.createElement('div'); nm.className = 'nm';
+    if(s.appIcon){ const ic = document.createElement('img'); ic.src = s.appIcon; ic.alt = ''; nm.appendChild(ic); }
+    const label = document.createElement('span'); label.textContent = s.name; label.title = s.name; // textContent: window titles are untrusted
+    nm.appendChild(label); card.appendChild(nm);
+    card.addEventListener('click', () => { pickerSelected = s; $('srcOk').disabled = false; renderPicker(); });
+    card.addEventListener('dblclick', () => finishPicker(s));
+    grid.appendChild(card);
+  });
+}
+async function pickSource({ windowOnly = false, screenOnly = false } = {}){
+  pickerScreenOnly = screenOnly;
+  pickerWindowOnly = windowOnly;
+  pickerSelected = null; pickerKind = windowOnly ? 'window' : 'screen'; $('srcOk').disabled = true;
+  $('source-grid').innerHTML = '<div class="src-empty">正在加载来源…</div>';
+  $('source-modal').querySelector('h3').textContent = windowOnly ? '选择要录制的 PDF 窗口' : (screenOnly ? '选择要录制的屏幕' : '选择录制内容');
+  sourceModal.style.display = 'flex';
+  const done = new Promise(res => { pickerResolve = res; });
+  try{ pickerSources = await api.listSources(); }catch(_){ pickerSources = []; }
+  if(!pickerResolve) return done; // cancelled while loading
+  if(windowOnly) pickerSources = pickerSources.filter(s => s.kind === 'window');
+  if(screenOnly) pickerSources = pickerSources.filter(s => s.kind === 'screen');
+  const firstSource = pickerSources.find(s => s.kind === pickerKind);
+  if(firstSource){ pickerSelected = firstSource; $('srcOk').disabled = false; }
+  renderPicker();
+  return done;
+}
+document.querySelectorAll('#source-modal .tab').forEach(t => t.addEventListener('click', () => { pickerKind = t.dataset.kind; renderPicker(); }));
+$('srcCancel').addEventListener('click', () => finishPicker(null));
+$('srcOk').addEventListener('click', () => finishPicker(pickerSelected));
+
+// ── Main recording flow ───────────────────────────────────────────────
+function pickMime(){
+  const list = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'];
+  return list.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+}
+
+function resetSessionState(){
+  chunksWebm = []; blobWebm = null; recWebm = null;
+  screenStream = camStream = micStream = audioCtx = null;
+  micGainNode = analyser = null;
+  recId = null; diskOk = false; diskQueue = Promise.resolve();
+  annos.length = 0; curAnno = null; laserTrail.length = 0; laserPos = null;
+  cancelStart = false;
+}
+
+async function start(){
+  if(recState !== 'idle' || previewModal.style.display === 'flex') return;
+  goStep(3);
+  recState = 'starting';
+  resetSessionState();
+
+  try{
+    const m = getMode();
+    const fps = Number(fpsSelect.value) || 30;
+    const bitrate = parseInt(qualitySelect.value);
+    const wantSysAudio = sysAudioChk.checked && m !== 'camera' && !sysAudioChk.disabled;
+    const hudMode = IS_DESKTOP && presentationChk.checked && m !== 'camera';
+    const useCanvas = m === 'both' || (m === 'screen' && (drawInScreenChk.checked || hudMode));
+    autoStopSec = parseInt(autoStopSelect.value) || 0;
+    minFrameMs = (1000 / fps) * 0.8;
+    let videoTrack, sysStream = null;
+
+    if(m !== 'camera'){
+      if(IS_DESKTOP){
+        setStatus('请选择要录制的内容…');
+        const picked = await pickSource({ screenOnly: hudMode });
+        if(!picked) throw abortError();
+        await api.selectSource(picked.id, wantSysAudio);
+      }
+      if(hudMode) await api.prepareHud();
+      setStatus(m === 'both' ? '第 1 步：选择要录制的内容…' : '等待屏幕共享…');
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: fps } }, audio: wantSysAudio });
+      if(screenStream.getAudioTracks().length) sysStream = screenStream;
+      else if(wantSysAudio) toast(IS_DESKTOP
+        ? '当前无法录制系统声音，将继续录制画面和麦克风。'
+        : '没有共享标签页声音，下次请在共享窗口中勾选“同时录制系统声音”。');
+    }
+
+    if(m === 'camera'){
+      setStatus('等待摄像头…');
+      camStream = await gum({ video: camConstraints(), audio: micOn ? micConstraints() : false });
+      videoTrack = camStream.getVideoTracks()[0];
+      mainVideo.srcObject = camStream;
+      mainVideo.style.display = 'block'; composite.style.display = 'none';
+      viewLabel.textContent = '摄像头'; viewEl.style.display = 'block';
+      disableDrawing();
+    } else {
+      if(m === 'both'){
+        setStatus('第 2 步：允许摄像头和麦克风权限…');
+        camStream = await gum({ video: camConstraints(), audio: micOn ? micConstraints() : false });
+      } else if(micOn){
+        // Screen-only: the mic is grabbed separately and mixed in
+        try{ micStream = await gum({ audio: micConstraints(), video: false }); }
+        catch(_){ toast('麦克风不可用，将不录制声音。'); }
+      }
+
+      if(useCanvas){
+        setStatus('正在合成画面…');
+        const [sv, cv] = await Promise.all([
+          makeOffscreenVideo(screenStream),
+          camStream ? makeOffscreenVideo(camStream) : Promise.resolve(null),
+        ]);
+        composite.width = sv.videoWidth;
+        composite.height = sv.videoHeight;
+        startDraw(sv, cv);
+        await sleep(300); // let the first real frame land before captureStream
+        composite.style.display = 'block'; mainVideo.style.display = 'none';
+        viewLabel.textContent = m === 'both' ? '屏幕 + 摄像头' : '屏幕 + 绘图工具';
+        viewEl.style.display = 'block';
+        enableDrawing();
+        videoTrack = composite.captureStream(fps).getVideoTracks()[0];
+      } else {
+        videoTrack = screenStream.getVideoTracks()[0];
+        mainVideo.srcObject = screenStream;
+        mainVideo.style.display = 'block'; composite.style.display = 'none';
+        viewLabel.textContent = '屏幕'; viewEl.style.display = 'block';
+        disableDrawing();
+      }
+    }
+
+    // One mixed audio track: voice (+ system/tab audio if shared)
+    const micSource = micStream || (micOn && camStream && camStream.getAudioTracks().length ? camStream : null);
+    const audioTrack = buildAudioGraph({ mic: micSource, system: sysStream });
+    const recStream = new MediaStream([videoTrack, audioTrack].filter(Boolean));
+
+    // If the shared screen/window goes away (user hits "Stop sharing", camera unplugged…), stop cleanly.
+    [screenStream, camStream].forEach(s => {
+      const t = s && s.getVideoTracks()[0];
+      if(t) t.addEventListener('ended', () => {
+        if(recState === 'recording' || recState === 'paused'){ toast('共享来源已结束，录制已停止。'); stop(); }
+      });
+    });
+
+    const cd = Number(countdownSelect.value) || 0;
+    if(cd > 0) await runCountdown(cd);
+    if(cancelStart) throw abortError();
+
+    if(IS_DESKTOP){
+      try{ recId = (await api.recStart()).id; diskOk = !!recId; }catch(_){ recId = null; diskOk = false; }
+    }
+
+    const mime = pickMime();
+    const recOpts = { videoBitsPerSecond: bitrate, audioBitsPerSecond: 128000 };
+    if(mime) recOpts.mimeType = mime;
+    recWebm = new MediaRecorder(recStream, recOpts);
+    recWebm.ondataavailable = e => {
+      if(!e.data || !e.data.size) return;
+      chunksWebm.push(e.data);
+      if(IS_DESKTOP && recId && diskOk){
+        const id = recId, blob = e.data;
+        diskQueue = diskQueue
+          .then(async () => { const r = await api.recChunk(id, await blob.arrayBuffer()); if(!r || !r.ok) diskOk = false; })
+          .catch(() => { diskOk = false; });
+      }
+    };
+  recWebm.onerror = () => { toast('录制出错，正在停止。'); stop(); };
+    recWebm.onstop = onStop;
+    recWebm.start(1000);
+
+    recState = 'recording';
+    if(hudMode) await api.showHud();
+    startTimer();
+    startMeter();
+    setStatus('正在录制… 可以切换到目标窗口正常操作');
+
+    startBtn.disabled   = true;
+    pauseBtn.disabled   = false;
+    stopBtn.disabled    = false;
+    screenshotBtn.disabled = false;
+    document.querySelectorAll('input[name="mode"]').forEach(r => r.disabled = true);
+
+    if(IS_DESKTOP){
+      api.setRecordingState(true).catch(() => {});
+      // In HUD mode the main window is hidden and the transparent toolbar remains available.
+      if(hudMode || (minimizeChk.checked && m !== 'camera' && !(m === 'screen' && drawInScreenChk.checked))){
+        setTimeout(() => { if(recState === 'recording') api.minimizeWindow().catch(() => {}); }, 250);
+      }
+    }
+  }catch(err){
+    if(recId && IS_DESKTOP){ api.recDiscard(recId).catch(() => {}); recId = null; }
+    cleanup();
+    setStatus(friendly(err));
+  }
+}
+
+function pause(){
+  if(recWebm && recWebm.state === 'recording'){
+    recWebm.pause();
+    recState = 'paused';
+    pauseStartedPerf = performance.now();
+    setStatus('已暂停');
+    pauseBtn.disabled  = true;
+    resumeBtn.disabled = false;
+    recDot.style.animationPlayState = 'paused';
+  }
+}
+
+function resume(){
+  if(recWebm && recWebm.state === 'paused'){
+    recWebm.resume();
+    recState = 'recording';
+    pausedAccum += performance.now() - pauseStartedPerf; pauseStartedPerf = 0;
+    setStatus('正在录制…');
+    resumeBtn.disabled = true;
+    pauseBtn.disabled  = false;
+    recDot.style.animationPlayState = 'running';
+  }
+}
+
+function stop(){
+  if(recWebm && recWebm.state !== 'inactive'){
+    recState = 'stopping';
+    recWebm.stop();
+  }
+}
+
+async function onStop(){
+  recordedSeconds = elapsedMs() / 1000; // measured before the timer is reset
+  stopTimer(); stopMeter();
+  blobWebm = new Blob(chunksWebm, { type: 'video/webm' });
+  chunksWebm = [];
+
+  if(IS_DESKTOP && recId){
+    try{
+      await diskQueue; // every chunk is on disk before we say "finished"
+      const r = await api.recFinish(recId);
+      if(!r || !r.ok) diskOk = false;
+    }catch(_){ diskOk = false; }
+  }
+
+  if(!blobWebm.size){
+    if(recId && IS_DESKTOP){ api.recDiscard(recId).catch(() => {}); recId = null; }
+    cleanup();
+    toast('没有录制到任何内容。');
+    return;
+  }
+  showPreview({ sizeBytes: blobWebm.size });
+  cleanup(false);
+}
+
+// Releases every resource a recording can hold. Anything new that holds a stream,
+// timer or context must be released here.
+function cleanup(resetUI = true){
+  stopDraw();
+  stopTimer(); stopMeter();
+  if(audioCtx){ audioCtx.close().catch(() => {}); audioCtx = null; }
+  micGainNode = analyser = null;
+  [screenStream, camStream, micStream].forEach(s => s && s.getTracks().forEach(t => t.stop()));
+  screenStream = camStream = micStream = null;
+  mainVideo.srcObject = null;
+  countdownEl.style.display = 'none';
+  if(resetUI){
+    viewEl.style.display = 'none';
+    disableDrawing();
+  }
+  recState = 'idle';
+  cancelStart = false;
+  startBtn.disabled   = false;
+  pauseBtn.disabled   = true;
+  resumeBtn.disabled  = true;
+  stopBtn.disabled    = true;
+  screenshotBtn.disabled = true;
+  recDot.style.animationPlayState = 'running';
+  document.querySelectorAll('input[name="mode"]').forEach(r => r.disabled = false);
+  setStatus('准备就绪');
+  if(IS_DESKTOP){
+    api.setRecordingState(false).catch(() => {});
+    api.hideHud().catch(() => {});
+    // Restore the normal control window after the HUD disappears.
+    api.restoreWindow().catch(() => {});
+  }
+}
+
+// ── Preview modal ─────────────────────────────────────────────────────
+// MediaRecorder WebM has no duration, so the scrubber would show "Infinity".
+// Seeking far past the end forces the browser to compute the real length.
+function fixPreviewDuration(){
+  previewVid.addEventListener('loadedmetadata', function once(){
+    previewVid.removeEventListener('loadedmetadata', once);
+    if(previewVid.duration === Infinity){
+      previewVid.currentTime = 1e101;
+      previewVid.addEventListener('timeupdate', function back(){
+        previewVid.removeEventListener('timeupdate', back);
+        previewVid.currentTime = 0;
+      });
+    }
+  });
+}
+
+function getTrim(){
+  const s = parseFloat(trimStart.value), e = parseFloat(trimEnd.value);
+  const start = Number.isFinite(s) && s > 0 ? s : 0;
+  let end = Number.isFinite(e) && e > start ? e : null;
+  if(end !== null && recordedSeconds && end >= recordedSeconds - 0.05) end = null; // = "to the end"
+  return { start, end };
+}
+function updateTrimInfo(){
+  const t = getTrim();
+  const len = t.end !== null ? t.end - t.start : (recordedSeconds ? recordedSeconds - t.start : null);
+  trimInfo.textContent = len !== null && len > 0 ? `Clip length: ${len.toFixed(1)}s` : '';
+}
+function resetTrim(){
+  trimStart.value = '0';
+  trimEnd.value = recordedSeconds ? recordedSeconds.toFixed(1) : '';
+  updateTrimInfo();
+}
+[trimStart, trimEnd].forEach(el => el.addEventListener('input', updateTrimInfo));
+$('setStartBtn').addEventListener('click', () => { trimStart.value = previewVid.currentTime.toFixed(1); updateTrimInfo(); });
+$('setEndBtn').addEventListener('click',   () => { trimEnd.value   = previewVid.currentTime.toFixed(1); updateTrimInfo(); });
+$('resetTrimBtn').addEventListener('click', resetTrim);
+
+function showPreview({ sizeBytes }){
+  hasSaved = false;
+  $('recSize').textContent = fmtSize(sizeBytes);
+  $('recDur').textContent  = recordedSeconds ? '· ' + fmtTime(Math.round(recordedSeconds)) : '';
+  resetTrim();
+  discardBtn.textContent = '🗑 放弃';
+  dlMp4Btn.disabled = dlGifBtn.disabled = !IS_DESKTOP;
+  dlMp4Btn.title = dlGifBtn.title = IS_DESKTOP ? '' : '需要桌面版';
+  $('mp4Unavail').style.display = IS_DESKTOP ? 'none' : 'block';
+  setExportBusy(false);
+  $('exportProgress').hidden = true;
+
+  const canPreview = !!blobWebm;
+  previewVid.style.display = canPreview ? 'block' : 'none';
+  $('noPreview').hidden = canPreview;
+  if(canPreview){
+    fixPreviewDuration();
+    previewVid.src = URL.createObjectURL(blobWebm);
+  }
+  previewModal.style.display = 'flex';
+  goStep(4);
+}
+
+function closePreview(){
+  previewModal.style.display = 'none';
+  goStep(1);
+  previewVid.pause();
+  if(previewVid.src) URL.revokeObjectURL(previewVid.src);
+  previewVid.removeAttribute('src'); previewVid.load();
+  if(IS_DESKTOP && recId){ api.recDiscard(recId).catch(() => {}); } // drop the recovery copy
+  recId = null; diskOk = false; blobWebm = null; hasSaved = false;
+  viewEl.style.display = 'none';
+  disableDrawing();
+}
+
+// ── Save-As helper (web build: native file picker, falls back to <a download>) ─
+async function saveAs(blob, suggestedName){
+  if('showSaveFilePicker' in window){
+    const ext = suggestedName.split('.').pop();
+    const mimeMap = { mp4:'video/mp4', webm:'video/webm' };
+    try{
+      const fh = await showSaveFilePicker({
+        suggestedName,
+        types:[{
+          description: ext.toUpperCase()+' video',
+          accept:{ [mimeMap[ext]||'video/webm']: ['.'+ext] }
+        }]
+      });
+      const ws = await fh.createWritable();
+      await ws.write(blob);
+      await ws.close();
+      return true;
+    }catch(e){ if(e.name === 'AbortError') return false; }
+  }
+  // Fallback for browsers without showSaveFilePicker
+  const a = Object.assign(document.createElement('a'),{
+    href: URL.createObjectURL(blob),
+    download: suggestedName
+  });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return true;
+}
+
+// ── Export (desktop app → bundled ffmpeg) ─────────────────────────────
+function setExportBusy(busy){
+  exporting = busy;
+  [dlMp4Btn, dlGifBtn, dlWebmBtn].forEach(b => { b.disabled = busy || (!IS_DESKTOP && b !== dlWebmBtn); });
+  discardBtn.disabled = busy;
+  $('exportProgress').hidden = !busy;
+}
+function updateExportProgress(p){
+  const bar = $('exportBar'), wrap = $('exportBarWrap');
+  if(p && p.percent !== null && p.percent !== undefined){
+    wrap.classList.remove('indeterminate');
+    bar.style.width = p.percent.toFixed(0) + '%';
+    $('exportText').textContent = `正在导出… ${p.percent.toFixed(0)}%`;
+  } else {
+    wrap.classList.add('indeterminate');
+    $('exportText').textContent = '正在导出…';
+  }
+}
+
+async function exportDesktop(format){
+  if(exporting || !IS_DESKTOP) return;
+  setExportBusy(true);
+  updateExportProgress(null);
+  setStatus(`正在导出 ${format.toUpperCase()}… 较长的录制可能需要一些时间`);
+  const off = api.onExportProgress(updateExportProgress);
+  try{
+    const useDisk = !!(recId && diskOk);
+    if(!useDisk && !blobWebm) throw new Error('录制文件已不可用。');
+    const res = await api.exportMedia({
+      recId: useDisk ? recId : null,
+      buffer: useDisk ? undefined : await blobWebm.arrayBuffer(), // only if the disk copy failed
+      format,
+      trim: getTrim(),
+      fps: Number(fpsSelect.value) || 30,
+      bitrate: parseInt(qualitySelect.value),
+      gifFps: Number(gifFpsSelect.value) || 15,
+      gifWidth: Number(gifWidthSelect.value) || 0,
+      askWhere: askWhereChk.checked,
+      durationHint: recordedSeconds,
+    });
+    if(res.canceled){
+      setStatus('准备就绪');
+      if(res.cancelledExport) toast('导出已取消');
+    } else if(res.success){
+      hasSaved = true; lastSavedPath = res.path;
+      discardBtn.textContent = '✔ 完成';
+      setStatus('已保存：' + res.path);
+      toast(`已保存 ${res.path.split(/[\\/]/).pop()}`, '打开所在文件夹', () => api.reveal(res.path), 9000);
+    } else {
+      setStatus(`${format.toUpperCase()} 导出失败`);
+      toast(`${format.toUpperCase()} 导出失败：${res.error}`, null, null, 12000);
+    }
+  }catch(err){
+    setStatus('导出失败');
+    toast('导出失败：' + err.message, null, null, 12000);
+  }finally{
+    off();
+    setExportBusy(false);
+  }
+}
+
+dlWebmBtn.addEventListener('click', async () => {
+  if(IS_DESKTOP){ exportDesktop('webm'); return; }
+  if(!blobWebm) return;
+  if(await saveAs(blobWebm, `recording-${Date.now()}.webm`)) closePreview();
+});
+dlMp4Btn.addEventListener('click', () => exportDesktop('mp4'));
+dlGifBtn.addEventListener('click', () => exportDesktop('gif'));
+$('exportCancelBtn').addEventListener('click', () => api && api.cancelExport());
+discardBtn.addEventListener('click', () => {
+  if(!hasSaved && !confirm('要放弃这次录制吗？录制内容尚未保存。')) return;
+  closePreview();
+});
+
+// ── Desktop: folders, global hotkeys, crash recovery ──────────────────
+if(IS_DESKTOP){
+  api.onHudAction(handleHudAction);
+  api.onHudPointer(handleHudPointer);
+  api.getConfig().then(cfg => {
+    $('saveDirLabel').textContent = cfg.saveDir;
+    $('saveDirLabel').title = cfg.saveDir;
+    if(cfg.platform !== 'win32'){
+      sysAudioChk.checked = false; sysAudioChk.disabled = true;
+      $('sysAudioLbl').classList.add('disabled');
+      $('sysAudioText').textContent = '录制系统声音（仅 Windows）';
+    } else {
+      $('sysAudioText').textContent = '录制系统声音';
+    }
+    const keys = cfg.hotkeys.map(h => `<kbd>${h.accelerator.replace('CommandOrControl','Ctrl').split('+').join('</kbd>+<kbd>')}</kbd> ${h.label}${h.registered ? '' : ' <i>(unavailable)</i>'}`);
+    $('globalKeys').innerHTML = 'Global (work from any app): ' + keys.join(' &nbsp; ');
+  }).catch(() => {});
+  $('chooseFolderBtn').addEventListener('click', async () => {
+    const r = await api.chooseFolder();
+    if(r && r.saveDir){ $('saveDirLabel').textContent = r.saveDir; $('saveDirLabel').title = r.saveDir; }
+  });
+  $('openFolderBtn').addEventListener('click', () => api.openFolder());
+
+  // A previous run died (or the app was closed on an unsaved preview): offer the footage back.
+  (async () => {
+    try{
+      const r = await api.recoveryCheck();
+      if(!r) return;
+      $('recoveryText').textContent = `发现一段未保存的录制：${new Date(r.startedAt).toLocaleString()}（${fmtSize(r.bytes)}）。`;
+      $('recoveryBanner').hidden = false;
+      $('recoverBtn').onclick = async () => {
+        const data = await api.recRead(r.id);
+        if(!data || !data.ok){ toast('无法加载这段录制。'); return; }
+        $('recoveryBanner').hidden = true;
+        recId = r.id; diskOk = true; recordedSeconds = 0; // true length is unknown; trimming still works
+        blobWebm = data.tooLarge ? null : new Blob([data.buffer], { type: 'video/webm' });
+        showPreview({ sizeBytes: data.bytes });
+      };
+      $('recoveryDeleteBtn').onclick = async () => {
+        if(!confirm('要永久删除这段已恢复的录制吗？')) return;
+        await api.recDiscard(r.id);
+        $('recoveryBanner').hidden = true;
+      };
+    }catch(_){ /* nothing to recover */ }
+  })();
+} else {
+  $('sysAudioText').textContent = '同时录制系统声音';
+  // The web build has no "are you sure you want to quit?" dialog of its own.
+  window.addEventListener('beforeunload', e => {
+    if(recState !== 'idle' || (previewModal.style.display === 'flex' && !hasSaved)){ e.preventDefault(); e.returnValue = ''; }
+  });
+}
+
+// Called by the main process for global hotkeys and the tray menu (with a user gesture,
+// which getDisplayMedia() requires).
+window.__srpAction = action => {
+  const active = recState === 'recording' || recState === 'paused';
+  if(action === 'toggle'){
+    if(active) stop();
+    else if(recState === 'idle') start();
+  } else if(action === 'pause'){
+    if(recState === 'recording') pause(); else if(recState === 'paused') resume();
+  } else if(action === 'screenshot'){
+    if(active) takeScreenshot();
+  }
+};
+
+// ── Event wiring ──────────────────────────────────────────────────────
+startBtn.addEventListener('click',       start);
+pauseBtn.addEventListener('click',       pause);
+resumeBtn.addEventListener('click',      resume);
+stopBtn.addEventListener('click',        stop);
+screenshotBtn.addEventListener('click',  takeScreenshot);
+
+document.addEventListener('keydown', e => {
+  const tag = e.target.tagName;
+  // Typing in a field must never trigger a shortcut (checkboxes/radios are fine).
+  if(tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && !['radio','checkbox','button'].includes(e.target.type))) return;
+
+  if(sourceModal.style.display === 'flex'){
+    if(e.code === 'Escape') finishPicker(null);
+    return;
+  }
+  if(previewModal.style.display === 'flex') return;
+
+  const active = recState === 'recording' || recState === 'paused';
+  if(e.code === 'Space' && active){
+    e.preventDefault();
+    recState === 'paused' ? resume() : pause();
+  } else if(e.code === 'Escape'){
+    if(recState === 'starting') cancelStart = true;
+    else if(active) stop();
+  } else if(e.code === 'KeyS' && active && !e.ctrlKey && !e.metaKey){
+    takeScreenshot();
+  } else if(e.code === 'KeyM' && (active || recState === 'idle') && !e.ctrlKey && !e.metaKey){
+    toggleMic();
+  } else if((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && drawBar.style.display === 'flex'){
+    e.preventDefault();
+    undoAnno();
+  }
+});
+
+// ── URL auto-start ────────────────────────────────────────────────────
+// Usage:
+//   ?start=screen        → open and auto-start screen recording
+//   ?start=camera        → open and auto-start camera recording
+//   ?start=both          → open and auto-start screen+camera recording
+// Examples:
+//   salikahmed595.github.io/screen-recorder-pro/?start=both
+//   salikahmed595.github.io/screen-recorder-pro/?start=screen
+(function(){
+  const p = new URLSearchParams(location.search);
+  const s = p.get('start');
+  if(!s) return;
+  const map = { screen:'screen', camera:'camera', both:'both', cam:'camera', all:'both' };
+  const mode = map[s.toLowerCase()];
+  if(!mode) return;
+  setMode(mode);
+  // Auto-start after a tiny delay so the page finishes rendering
+  setTimeout(() => startBtn.click(), 400);
+})();
+</script>
+</body>
+</html>
