@@ -439,7 +439,7 @@ h1 em{font-style:normal;color:var(--accent)}
       <label class="chk" id="sysAudioLbl"><input type="checkbox" id="sysAudioChk"/> <span id="sysAudioText">同时录制系统声音</span></label>
       <label class="chk" title="通过画布录制，允许你在实时预览上绘图，会稍微增加 CPU 占用。"><input type="checkbox" id="drawInScreenChk"/> 仅录屏模式启用绘图工具</label>
       <label class="chk desktop-only" title="录制时隐藏录制窗口。关闭后可在实时预览上使用绘图工具。"><input type="checkbox" id="minimizeChk" checked/> 录制时最小化软件</label>
-      <label class="chk desktop-only" title="录制整块屏幕并显示透明悬浮工具栏，工具栏默认不挡住 PDF 操作。"><input type="checkbox" id="presentationChk"/> 悬浮演示模式（可边录边涂鸦）</label>
+      <label class="chk desktop-only" title="录制整块屏幕并显示透明悬浮工具栏，工具栏默认不挡住 PDF 操作。"><input type="checkbox" id="presentationChk" checked/> 悬浮演示模式（可边录边涂鸦）</label>
     </div>
   </div>
   <div class="options desktop-only">
@@ -667,6 +667,16 @@ function bind(el, key){
   [sysAudioChk,'sysAudio'], [drawInScreenChk,'drawInScreen'], [minimizeChk,'minimize'], [presentationChk,'presentation'],
   [askWhereChk,'askWhere'], [gifFpsSelect,'gifFps'], [gifWidthSelect,'gifWidth'],
 ].forEach(([el, key]) => bind(el, key));
+
+  // The floating toolbar is enabled by default for desktop installs. Apply this
+  // once so users upgrading from an older build are not stuck with a saved false
+  // value, while later manual changes continue to persist normally.
+  if(IS_DESKTOP && saved.hudDefaultApplied !== true){
+    presentationChk.checked = true;
+    saved.presentation = true;
+    saved.hudDefaultApplied = true;
+    persist();
+  }
 
 // ── State ─────────────────────────────────────────────────────────────
 // NOTE: we deliberately do NOT use MediaRecorder's native "video/mp4" mode.
@@ -1877,3 +1887,4 @@ document.addEventListener('keydown', e => {
 </script>
 </body>
 </html>
+
