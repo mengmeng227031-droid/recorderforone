@@ -35,6 +35,8 @@ const hotkeyStatus = {};
 let win = null;
 let hud = null;
 let hudBounds = null;
+let hudReady = false;
+let hudWantVisible = false;
 let tray = null;
 let isRecording = false;
 let forceQuit = false;
@@ -170,6 +172,8 @@ function getHudBounds(sourceId) {
 function createHud() {
   if (hud && !hud.isDestroyed()) return hud;
   hudBounds = getHudBounds(pendingSource && pendingSource.id);
+  hudReady = false;
+  hudWantVisible = false;
   hud = new BrowserWindow({
     ...hudBounds,
     frame: false,
@@ -195,22 +199,40 @@ function createHud() {
   // The HUD is visible to the presenter but excluded from desktop capture.
   if (process.platform === 'win32' || process.platform === 'darwin') hud.setContentProtection(true);
   hud.setIgnoreMouseEvents(true, { forward: true });
-  hud.loadFile('hud.html');
-  hud.on('closed', () => { hud = null; hudBounds = null; });
+  hud.webContents.once('did-finish-load', () => {
+    hudReady = true;
+    if (hudWantVisible && hud && !hud.isDestroyed()) {
+      hud.showInactive();
+      if (!hud.isVisible()) hud.show();
+      hud.moveTop();
+    }
+  });
+  hud.loadFile(path.join(__dirname, 'hud.html'));
+  hud.on('closed', () => {
+    hud = null;
+    hudBounds = null;
+    hudReady = false;
+    hudWantVisible = false;
+  });
   return hud;
 }
 
 function showHud() {
   const h = createHud();
   if (h && !h.isDestroyed()) {
+    hudWantVisible = true;
     h.setIgnoreMouseEvents(true, { forward: true });
-    h.showInactive();
-    h.moveTop();
+    if (hudReady) {
+      h.showInactive();
+      if (!h.isVisible()) h.show();
+      h.moveTop();
+    }
   }
   return { ok: true };
 }
 
 function hideHud() {
+  hudWantVisible = false;
   if (hud && !hud.isDestroyed()) hud.hide();
   return { ok: true };
 }
@@ -609,3 +631,4 @@ if (!gotLock) {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 }
+
