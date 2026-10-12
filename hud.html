@@ -43,11 +43,11 @@ function setInteractive(value){ api.setMouseMode(!!value); }
 function showToolbar(){
   toolbar.classList.remove('hidden');
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => { if(!drawing) toolbar.classList.add('hidden'); }, 10000);
+  hideTimer = setTimeout(() => toolbar.classList.add('hidden'), 10000);
 }
 function scheduleHide(){
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => { if(!drawing) toolbar.classList.add('hidden'); }, 10000);
+  hideTimer = setTimeout(() => toolbar.classList.add('hidden'), 10000);
 }
 function setTool(tool){
   currentTool = currentTool === tool ? null : tool;
