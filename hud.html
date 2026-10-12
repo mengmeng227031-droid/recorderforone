@@ -69,7 +69,7 @@ document.querySelectorAll('button[data-action]').forEach(button => {
 });
 
 window.addEventListener('mousemove', e => {
-  if(e.clientY <= 90){ showToolbar(); setInteractive(!drawing); }
+  if(e.clientY <= 90){ showToolbar(); setInteractive(true); }
   else if(!drawing && e.clientY > 125){ scheduleHide(); setInteractive(false); }
 });
 toolbar.addEventListener('mouseenter', () => { showToolbar(); setInteractive(true); });
