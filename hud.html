@@ -9,7 +9,7 @@
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:"Segoe UI",system-ui,sans-serif;color:#f2f5ee}
 body{pointer-events:none}
 body.drawing{pointer-events:auto}
-#toolbar{position:fixed;top:12px;left:50%;display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid rgba(185,244,100,.35);border-radius:14px;background:rgba(14,18,12,.94);box-shadow:0 8px 30px rgba(0,0,0,.35);opacity:1;transform:translate(-50%,0);transition:opacity .22s,transform .22s;pointer-events:auto;user-select:none}
+#toolbar{display:none!important}
 #toolbar.hidden{opacity:0;transform:translate(-50%,-22px);pointer-events:none}
 .group{display:flex;align-items:center;gap:5px;padding:0 3px;border-right:1px solid rgba(255,255,255,.14)}
 .group:last-child{border-right:0}
@@ -144,57 +144,42 @@ resizeInk();
 
 function setInteractive(value){ api.setMouseMode(!!value); }
 function hideToolbar(){
-  toolbar.classList.add('hidden');
-  if(!drawing) setInteractive(false);
+  clearTimeout(hideTimer);
+  api.toolbar('hide');
 }
 function showToolbar(){
-  toolbar.classList.remove('hidden');
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(hideToolbar, 10000);
+  api.toolbar('show');
 }
 function scheduleHide(){
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(hideToolbar, 10000);
 }
-function setTool(tool){
-  currentTool = currentTool === tool ? null : tool;
+function setTool(tool, notify = true){
+  currentTool = notify && currentTool === tool ? null : tool;
   drawing = !!currentTool;
   document.body.classList.toggle('drawing', drawing);
   document.querySelectorAll('[data-action="tool"]').forEach(b => b.classList.toggle('active', b.dataset.tool === currentTool));
-  api.action({type:'tool', tool:currentTool});
+  if(notify) api.action({type:'tool', tool:currentTool});
   setInteractive(drawing);
-  showToolbar();
 }
+api.onAction(action => {
+  if(action && action.type === 'tool') setTool(action.tool || null, false);
+});
 document.querySelectorAll('button[data-action]').forEach(button => {
   button.addEventListener('click', () => {
     const action = button.dataset.action;
     if(action === 'tool'){ setTool(button.dataset.tool); return; }
     if(action === 'pause') setPaused(!isPaused);
-    if(action === 'pointer'){
-      inkCurrent = null;
-      strokePointer = false;
-      setTool(null);
-      api.action({type:'tool', tool:null});
-      redrawInk();
-      showToolbar();
-      return;
-    }
     if(action === 'undo') undoInk();
     if(action === 'clear' || action === 'stop') clearInk();
     api.action({type:action});
     if(action === 'stop') stateEl.textContent = '正在停止…';
-    showToolbar();
   });
 });
 
 window.addEventListener('mousemove', e => {
-  const r = toolbar.getBoundingClientRect();
-  const overToolbar = !toolbar.classList.contains('hidden') && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-  if(overToolbar || e.clientY <= 90){ showToolbar(); setInteractive(true); }
-  else if(!drawing){ scheduleHide(); setInteractive(false); }
+  if(e.clientY <= 90) api.toolbar('show');
 });
-toolbar.addEventListener('mouseenter', () => { showToolbar(); setInteractive(true); });
-toolbar.addEventListener('mouseleave', () => { if(!drawing){ setInteractive(false); scheduleHide(); } });
 
 function sendPointer(type, e){
   api.pointer({type, screenX:e.screenX, screenY:e.screenY, buttons:e.buttons || 0});
@@ -211,8 +196,6 @@ window.addEventListener('pointerup', e => {
 window.addEventListener('pointercancel', e => {
   if(drawing && strokePointer){ localPointer('cancel',e); sendPointer('cancel', e); strokePointer = false; }
 });
-showToolbar();
-scheduleHide();
 </script>
 </body>
 </html>
