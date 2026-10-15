@@ -58,6 +58,8 @@ Three single-file recorders in [`examples/`](examples) — [One Click](examples/
 
 ## Development
 
+For Codex maintenance, read [`CODEX_PROJECT.md`](CODEX_PROJECT.md) first. It records the current architecture, recent HUD changes, pause/resume flow, and verification commands.
+
 ```bash
 npm install
 npm start        # run the desktop app
@@ -200,3 +202,4 @@ MIT — free to use, modify, and distribute.
 ---
 
 Made by [salikahmed595](https://github.com/salikahmed595)
+
