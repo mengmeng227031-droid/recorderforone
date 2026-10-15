@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('hud:pointer', handler);
     return () => ipcRenderer.removeListener('hud:pointer', handler);
   },
+  setHudState: (paused) => ipcRenderer.send('hud:state', { paused: !!paused }),
   setRecordingState: invoke('rec:state'),
 
   // Disk-backed recording + crash recovery
@@ -55,3 +56,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Screenshots: (ArrayBuffer, fileName, copyToClipboard)
   saveImage: invoke('image:save'),
 });
+
