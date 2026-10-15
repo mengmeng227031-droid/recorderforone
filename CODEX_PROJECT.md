@@ -14,6 +14,7 @@ Windows Electron 屏幕录制软件，支持屏幕、摄像头、屏幕+摄像�
 | `main.js` | Electron 主进程、屏幕源选择、磁盘恢复、FFmpeg、悬浮 HUD 窗口和 IPC |
 | `preload.js` | 主窗口安全 IPC API |
 | `hud.html` | 透明全屏悬浮工具栏、鼠标穿透、屏幕实时笔迹和暂停/继续按钮 |
+| `hud-toolbar.html` | 独立的小范围悬浮工具栏；只占工具栏区域，不拦截后方应用 |
 | `hud-preload.js` | HUD 安全 IPC API |
 | `lib/ffmpeg-args.js` | MP4/GIF/WebM 导出参数 |
 | `test/` | Node 测试和 FFmpeg 集成测试 |
@@ -23,6 +24,7 @@ Windows Electron 屏幕录制软件，支持屏幕、摄像头、屏幕+摄像�
 最近的改动集中在 `hud.html`、`hud-preload.js`、`preload.js`、`main.js` 和 `index.html`：
 
 - HUD 工具栏增加 `🖱` 鼠标模式按钮；鼠标模式下工具栏外穿透到 PDF，涂鸦模式下工具栏外接收笔迹。
+- 工具栏已从全屏 HUD 拆成独立窗口，新增“隐藏”按钮；隐藏后移动鼠标到屏幕顶部可重新显示。
 - HUD 增加独立透明笔迹层，笔迹会显示在用户当前屏幕，同时录制合成画布仍会记录笔迹。
 - HUD 的暂停按钮会在暂停后变成 `▶`，文字变为“继续录制”。暂停状态通过 `hud:state` IPC 在主窗口、快捷键、托盘和 HUD 之间同步。
 - 悬浮模式首次运行默认开启，并兼容旧版保存设置。
