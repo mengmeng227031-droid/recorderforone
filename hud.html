@@ -37,6 +37,7 @@ body.drawing #toolbar{border-color:#b9f464}
 const api = window.hudAPI;
 const toolbar = document.getElementById('toolbar');
 const stateEl = document.getElementById('state');
+const pauseBtn = toolbar.querySelector('[data-action="pause"]');
 const ink = document.getElementById('ink');
 const inkCtx = ink.getContext('2d');
 let currentTool = null;
@@ -48,6 +49,15 @@ let inkCurrent = null;
 let laserTrail = [];
 let laserRaf = 0;
 let strokePointer = false;
+let isPaused = false;
+
+function setPaused(value){
+  isPaused = !!value;
+  pauseBtn.textContent = isPaused ? '▶' : 'Ⅱ';
+  pauseBtn.title = isPaused ? '继续录制' : '暂停录制';
+  stateEl.textContent = isPaused ? '⏸ 已暂停' : '● 录制中';
+}
+api.onState(setPaused);
 
 function resizeInk(){
   inkScale = window.devicePixelRatio || 1;
@@ -159,6 +169,7 @@ document.querySelectorAll('button[data-action]').forEach(button => {
   button.addEventListener('click', () => {
     const action = button.dataset.action;
     if(action === 'tool'){ setTool(button.dataset.tool); return; }
+    if(action === 'pause') setPaused(!isPaused);
     if(action === 'pointer'){
       inkCurrent = null;
       strokePointer = false;
