@@ -309,6 +309,10 @@ ipcMain.on('hud:action', (event, action) => {
   if (!trustedHud(event) || !win || win.isDestroyed()) return;
   win.webContents.send('hud:action', action);
 });
+ipcMain.on('hud:state', (event, state = {}) => {
+  if (!trusted(event) || !hud || hud.isDestroyed()) return;
+  hud.webContents.send('hud:state', { paused: !!state.paused });
+});
 ipcMain.on('hud:pointer', (event, pointer = {}) => {
   if (!trustedHud(event) || !win || win.isDestroyed() || !hudBounds) return;
   const sx = Number(pointer.screenX), sy = Number(pointer.screenY);
