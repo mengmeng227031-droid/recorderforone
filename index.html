@@ -1509,6 +1509,7 @@ function pause(){
     pauseBtn.disabled  = true;
     resumeBtn.disabled = false;
     recDot.style.animationPlayState = 'paused';
+    if(IS_DESKTOP) api.setHudState(true);
   }
 }
 
@@ -1521,6 +1522,7 @@ function resume(){
     resumeBtn.disabled = true;
     pauseBtn.disabled  = false;
     recDot.style.animationPlayState = 'running';
+    if(IS_DESKTOP) api.setHudState(false);
   }
 }
 
@@ -1582,6 +1584,7 @@ function cleanup(resetUI = true){
   setStatus('准备就绪');
   if(IS_DESKTOP){
     api.setRecordingState(false).catch(() => {});
+    api.setHudState(false);
     api.hideHud().catch(() => {});
     // Restore the normal control window after the HUD disappears.
     api.restoreWindow().catch(() => {});
