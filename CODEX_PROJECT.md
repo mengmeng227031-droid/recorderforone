@@ -29,6 +29,7 @@ Windows Electron 屏幕录制软件，支持屏幕、摄像头、屏幕+摄像�
 - HUD 的暂停按钮会在暂停后变成 `▶`，文字变为“继续录制”。暂停状态通过 `hud:state` IPC 在主窗口、快捷键、托盘和 HUD 之间同步。
 - 悬浮模式首次运行默认开启，并兼容旧版保存设置。
 - HUD 等待 `did-finish-load` 后再显示，避免录制开始时悬浮层未出现。
+- 清空/撤销操作同时同步主录制画布和 HUD 本地透明笔迹层；隐藏工具栏后必须先把鼠标移出顶部唤回区，再次移入顶部才会显示，避免点击隐藏后立即弹回。
 
 查看最近提交：
 
@@ -59,5 +60,4 @@ git diff --check
 本地完整仓库位于 `E:\aowsome\screen-recorder-pro`。`vendor/ffmpeg.exe` 超过 GitHub 单文件限制，因此 GitHub 仓库使用 source-only 发布副本；不要直接把含大文件的本地历史推到 GitHub。当前用户仓库为：
 
 `https://github.com/mengmeng227031-droid/recorderforone`
-
 
