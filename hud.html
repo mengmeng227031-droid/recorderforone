@@ -50,6 +50,8 @@ let laserTrail = [];
 let laserRaf = 0;
 let strokePointer = false;
 let isPaused = false;
+// After clicking “隐藏”, require leaving the top edge before it can be shown again.
+let revealArmed = false;
 
 function setPaused(value){
   isPaused = !!value;
@@ -163,7 +165,12 @@ function setTool(tool, notify = true){
   setInteractive(drawing);
 }
 api.onAction(action => {
-  if(action && action.type === 'tool') setTool(action.tool || null, false);
+  if(!action) return;
+  if(action.type === 'tool') setTool(action.tool || null, false);
+  if(action.type === 'undo') undoInk();
+  if(action.type === 'clear' || action.type === 'stop') clearInk();
+  if(action.type === 'toolbar-hidden') revealArmed = false;
+  if(action.type === 'toolbar-shown') revealArmed = false;
 });
 document.querySelectorAll('button[data-action]').forEach(button => {
   button.addEventListener('click', () => {
@@ -178,7 +185,12 @@ document.querySelectorAll('button[data-action]').forEach(button => {
 });
 
 window.addEventListener('mousemove', e => {
-  if(e.clientY <= 90) api.toolbar('show');
+  if(e.clientY > 90) {
+    revealArmed = true;
+  } else if(revealArmed) {
+    revealArmed = false;
+    api.toolbar('show');
+  }
 });
 
 function sendPointer(type, e){
