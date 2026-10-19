@@ -37,6 +37,9 @@ let hud = null;
 let hudBounds = null;
 let hudReady = false;
 let hudWantVisible = false;
+let hudToolbar = null;
+let hudToolbarReady = false;
+let hudToolbarWantVisible = false;
 let tray = null;
 let isRecording = false;
 let forceQuit = false;
@@ -169,6 +172,20 @@ function getHudBounds(sourceId) {
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
+function getHudToolbarBounds(sourceId) {
+  const display = screen.getAllDisplays().find(d => {
+    const match = typeof sourceId === 'string' && sourceId.match(/^screen:(\d+)/);
+    return match ? String(d.id) === match[1] : d.bounds.x === getHudBounds(sourceId).x && d.bounds.y === getHudBounds(sourceId).y;
+  }) || screen.getPrimaryDisplay();
+  const width = 760;
+  return {
+    x: Math.round(display.bounds.x + (display.bounds.width - width) / 2),
+    y: display.bounds.y + 8,
+    width,
+    height: 64,
+  };
+}
+
 function createHud() {
   if (hud && !hud.isDestroyed()) return hud;
   hudBounds = getHudBounds(pendingSource && pendingSource.id);
@@ -217,8 +234,56 @@ function createHud() {
   return hud;
 }
 
+function createHudToolbar() {
+  if (hudToolbar && !hudToolbar.isDestroyed()) return hudToolbar;
+  const bounds = getHudToolbarBounds(pendingSource && pendingSource.id);
+  hudToolbarReady = false;
+  hudToolbarWantVisible = false;
+  hudToolbar = new BrowserWindow({
+    ...bounds,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    focusable: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    show: false,
+    alwaysOnTop: true,
+    fullscreenable: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, 'hud-preload.js'),
+      backgroundThrottling: false,
+    },
+  });
+  hudToolbar.setAlwaysOnTop(true, 'screen-saver');
+  if (process.platform === 'win32' || process.platform === 'darwin') hudToolbar.setContentProtection(true);
+  hudToolbar.webContents.once('did-finish-load', () => {
+    hudToolbarReady = true;
+    if (hudToolbarWantVisible && hudToolbar && !hudToolbar.isDestroyed()) {
+      hudToolbar.showInactive();
+      if (!hudToolbar.isVisible()) hudToolbar.show();
+      hudToolbar.moveTop();
+    }
+  });
+  hudToolbar.loadFile(path.join(__dirname, 'hud-toolbar.html'));
+  hudToolbar.on('closed', () => {
+    hudToolbar = null;
+    hudToolbarReady = false;
+    hudToolbarWantVisible = false;
+  });
+  return hudToolbar;
+}
+
 function showHud() {
   const h = createHud();
+  const t = createHudToolbar();
+  hudWantVisible = true;
+  hudToolbarWantVisible = true;
   if (h && !h.isDestroyed()) {
     hudWantVisible = true;
     h.setIgnoreMouseEvents(true, { forward: true });
@@ -228,12 +293,40 @@ function showHud() {
       h.moveTop();
     }
   }
+  if (t && !t.isDestroyed() && hudToolbarReady) {
+    t.showInactive();
+    if (!t.isVisible()) t.show();
+    t.moveTop();
+  }
+  if (h && !h.isDestroyed()) h.webContents.send('hud:action', { type: 'toolbar-shown' });
   return { ok: true };
 }
 
 function hideHud() {
   hudWantVisible = false;
+  hudToolbarWantVisible = false;
   if (hud && !hud.isDestroyed()) hud.hide();
+  if (hudToolbar && !hudToolbar.isDestroyed()) hudToolbar.hide();
+  if (hud && !hud.isDestroyed()) hud.webContents.send('hud:action', { type: 'toolbar-hidden' });
+  return { ok: true };
+}
+
+function showHudToolbar() {
+  const t = createHudToolbar();
+  hudToolbarWantVisible = true;
+  if (t && !t.isDestroyed() && hudToolbarReady) {
+    t.showInactive();
+    if (!t.isVisible()) t.show();
+    t.moveTop();
+  }
+  if (hud && !hud.isDestroyed()) hud.webContents.send('hud:action', { type: 'toolbar-shown' });
+  return { ok: true };
+}
+
+function hideHudToolbar() {
+  hudToolbarWantVisible = false;
+  if (hudToolbar && !hudToolbar.isDestroyed()) hudToolbar.hide();
+  if (hud && !hud.isDestroyed()) hud.webContents.send('hud:action', { type: 'toolbar-hidden' });
   return { ok: true };
 }
 
@@ -288,6 +381,9 @@ function trusted(event) {
 function trustedHud(event) {
   return !!hud && !hud.isDestroyed() && event.sender === hud.webContents;
 }
+function trustedHudWindow(event) {
+  return trustedHud(event) || (!!hudToolbar && !hudToolbar.isDestroyed() && event.sender === hudToolbar.webContents);
+}
 function handle(channel, fn) {
   ipcMain.handle(channel, (event, ...args) => {
     if (!trusted(event)) throw new Error('Untrusted IPC sender');
@@ -296,7 +392,7 @@ function handle(channel, fn) {
 }
 
 // ── Presenter HUD ───────────────────────────────────────────────────────
-handle('hud:prepare', () => { createHud(); return { ok: true }; });
+handle('hud:prepare', () => { createHud(); createHudToolbar(); return { ok: true }; });
 handle('hud:show', () => showHud());
 handle('hud:hide', () => hideHud());
 
@@ -306,12 +402,24 @@ ipcMain.on('hud:mouse-mode', (event, interactive) => {
   else hud.setIgnoreMouseEvents(true, { forward: true });
 });
 ipcMain.on('hud:action', (event, action) => {
-  if (!trustedHud(event) || !win || win.isDestroyed()) return;
+  if (!trustedHudWindow(event) || !win || win.isDestroyed()) return;
+  if (action && action.type === 'toolbar-hide') {
+    hideHudToolbar();
+    return;
+  }
   win.webContents.send('hud:action', action);
+  if (hud && !hud.isDestroyed() && event.sender !== hud.webContents) hud.webContents.send('hud:action', action);
+  if (hudToolbar && !hudToolbar.isDestroyed() && event.sender !== hudToolbar.webContents) hudToolbar.webContents.send('hud:action', action);
 });
 ipcMain.on('hud:state', (event, state = {}) => {
   if (!trusted(event) || !hud || hud.isDestroyed()) return;
   hud.webContents.send('hud:state', { paused: !!state.paused });
+  if (hudToolbar && !hudToolbar.isDestroyed()) hudToolbar.webContents.send('hud:state', { paused: !!state.paused });
+});
+ipcMain.on('hud:toolbar', (event, action) => {
+  if (!trustedHudWindow(event)) return;
+  if (action === 'hide') hideHudToolbar();
+  else if (action === 'show') showHudToolbar();
 });
 ipcMain.on('hud:pointer', (event, pointer = {}) => {
   if (!trustedHud(event) || !win || win.isDestroyed() || !hudBounds) return;
@@ -628,6 +736,7 @@ if (!gotLock) {
   app.on('before-quit', () => {
     forceQuit = true;
     if (hud && !hud.isDestroyed()) hud.destroy();
+    if (hudToolbar && !hudToolbar.isDestroyed()) hudToolbar.destroy();
   });
   app.on('will-quit', () => globalShortcut.unregisterAll());
   app.on('window-all-closed', () => app.quit());
